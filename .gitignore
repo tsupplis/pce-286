@@ -29,6 +29,7 @@ src/arch/ibmpc/pce-ibmpc
 src/arch/ibmpc/pce-ibmpc.cfg
 src/arch/ibmpc/bios/ibmpc-pcex.rom
 src/cpu/e8086/e8086.a
+src/cpu/e8080/e8080.a
 src/arch/sims32/pce-sims32
 src/arch/sims32/pce-sims32.cfg
 src/arch/macplus/pce-macplus
