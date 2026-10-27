@@ -2,6 +2,7 @@
 **/.DS_Store
 **/*.o
 /do_build
+/configure
 /c
 /private
 /ibmxt-dos-5.0
