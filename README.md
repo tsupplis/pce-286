@@ -1,5 +1,8 @@
-PCE - PC Emulator
-==============================================================================
+# PCE-286
+
+This project is a enhancement to Hampa's PCE excellent emulator adding protected 286 support to run OS/2 1.X and NEC V20 8080 instructions to run a CP/M-816 configuration.
+
+## PCE - PC Emulator
 
 PCE is a collection of microcomputer emulators.
 
@@ -20,18 +23,24 @@ doc/monitor.txt
 doc/messages.txt
 	Messages to control the emulator
 
+## Enhancements to Hampa's PCE
 
-Install
-==============================================================================
+- Full 286 support including protected mode
+- Support for NEC V20 8080 instruction set
+
+## Install
 
 To install do:
 
+```
 ./configure
 make
 make install
+```
 
 The most important options for configure are:
 
+```
 --prefix=path
 Set the installation prefix. The default is /usr/local.
 
@@ -40,7 +49,7 @@ Build the X11 based terminal.
 
 --with-sdl
 Build the SDL based terminal.
-
+```
 
 have fun
 Hampa Hug <hampa@hampa.ch>
