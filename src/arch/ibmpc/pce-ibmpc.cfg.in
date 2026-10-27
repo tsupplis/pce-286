@@ -1,0 +1,838 @@
+# pce-ibmpc.cfg
+#
+# Example config file
+
+
+cfg.hdc = false
+
+
+# Add a directory to the end of the file search path.
+#
+# The search path is used if an input file is specified with
+# a relative file name. In that case the file is searched for
+# in all directories of the search path. The current directory
+# is always implicitly added to the end of the search path.
+#
+# If the first character of the string is a "-", the directory
+# is added to the beginning of the search path.
+path = "rom"
+path = "PCE_DIR_DATA/ibmpc"
+path = "-."
+
+
+system {
+	# The specific model to emulate. Possible values are:
+	#   5150      IBM PC (8088, no second PIC/DMA, no CMOS)
+	#   5160      IBM PC/XT (8088/8086/V20, XT HDC support)
+	#   m24       Olivetti M24 / AT&T 6300
+	#   atari-pc  Atari PC
+	#   5170      IBM PC/AT (80286, second PIC/DMA, CMOS RTC)
+	model = "5150"
+
+	# The boot drive. Use 0 for the first floppy disk drive
+	# and 128 for the first hard disk.
+	boot = 128
+
+	# Enable or disable the POST memory test. If this option
+	# is set to 0, 0x1234 is written to 0040:0072, simulating
+	# a restart instead of a cold start.
+	memtest = 1
+
+	# The number of floppy disk drives.
+	floppy_disk_drives = 2
+
+	# Enable read access to the host's RTC.
+	rtc = 1
+
+	# When a CGA compatible video card is selected, start up
+	# in 40 column mode.
+	cga40 = 0
+
+	# Patch the main BIOS before the emulator starts running.
+	# If this option is set, the main BIOS is patched to use
+	# a custom initialization routine.
+	# AT (5170): set this to 0. Native BIOS reset/resume is required
+	# when 286 software resets the CPU to leave protected mode.
+	# PCEX startup otherwise restarts boot instead of resuming the caller.
+	# Its PC/XT equipment initialization also misreports AT floppy/mouse
+	# state. Keep native AT initialization even with assisted DOS disk boot.
+	patch_bios_init = 1
+
+	# Patch BIOS interrupt 0x19
+	# If this option is set, custom code is executed whenever
+	# int 0x19 is called. This custom code enables the PCE
+	# int 0x13 handler.
+	# AT: use 0 for native BIOS disk boot. The tested AMI DOS setup can
+	# use 1 with a loaded PCEX ROM for assisted disk boot/access, while
+	# keeping patch_bios_init=0. Assisted disk tests do not validate
+	# native WD1003 transfers or OS/2 disk-driver compatibility.
+	patch_bios_int19 = 1
+}
+
+
+# Olivetti M24 configuration.
+# This section is only used if system.model is set to "m24".
+m24 {
+	#  0-3: RAM size
+	#  4:   NPU (0=not installed, 1=installed)
+	#  5:   serial interface (0=8250, 1=8530)
+	#  6:   ?
+	#  7:   system memory (0=RAM bank 0, 1=RAM bank 0 and 1)
+	switches0 = 0x00
+
+	# 0:   0=360K, 1=720K
+	# 1:   speed 0=800ns, 1=250ns
+	# 2:   0=ROM HDU system board, 1=ROM HDU external
+	# 3:   0=scroll cpu, 1=slow scroll
+	# 4-5: monitor (0=EGA, 1=40*25, 2=80*25, 3=mono)
+	# 6-7: MFDU (0=1 MFDU, 1=2 MFDU)
+	switches1 = 0x60
+}
+
+
+cpu {
+	# The CPU model.
+	# Recognized models are: 8086, 8088, 80186, 80188, v20, v30, 80286
+	model = "80186"
+
+	# This sets the CPU speed with respect to the emulated
+	# system clock. A value of 1 emulates a 4.77MHz CPU.
+	# A higher value emulates a faster CPU but also takes up
+	# more host CPU time. A value of 0 dynamically adjusts
+	# the CPU speed.
+	speed = 0
+}
+
+
+# Multiple "ram" sections may be present but they must not overlap.
+ram {
+	# The linear base address
+	address = 0
+
+	# The memory block size
+	size = 640K
+
+	# The memory block is initialized with this value
+	default = 0x00
+}
+
+# ---------------------------------------------------------------------------
+# Extended RAM above 1 MB (80286 only)
+#
+# The 80286 has a 24-bit address bus (16 MB).  Adding a second [ram] section
+# at address 0x100000 maps physical extended memory directly into pc->mem.
+#
+# On sub-286 CPUs (8086, V20, 80186 …) addr_mask = 0xFFFFF so the CPU can
+# never generate an address >= 0x100000.  The block is allocated in host RAM
+# at startup but is silently unreachable — no crash, no side effects.
+#
+# If hma = 1 is set in [xms], that block occupies 0x100000–0x10FFEF (64K-16B).
+# To avoid overlap either:
+#   a) Start extended RAM at 0x110000 (leaves HMA intact), or
+#   b) Set hma = 0 in [xms] and start at 0x100000 (recommended for >1MB configs).
+#
+# Example: 3 MB extended RAM → total addressable RAM = 640K + 3M = 3.5 MB
+#   Pair with: hma = 0 in the [xms] section below.
+#
+#ram {
+#	address = 0x100000    # 1 MB mark
+#	size    = 3M          # 3,145,728 bytes of extended RAM
+#	default = 0x00
+#}
+# ---------------------------------------------------------------------------
+
+
+# Multiple "rom" sections may be present
+rom {
+	# The linear base address
+	address = 0xf0000
+
+	# The rom size in bytes
+	size = 64K
+
+	# The memory block is initialized with this value
+	default = 0xff
+
+	# The file from which the rom code is loaded
+	#file = "pce-bios.rom"
+}
+
+
+# "load" sections are processed after all the "ram" and "rom"
+# sections. It is possible to overwrite read-only blocks, too.
+load {
+	# The main BIOS
+	format  = "binary"
+	address = 0xfe000
+	file    = "ibm-pc-1982.rom"
+}
+
+load {
+	# The ROM BASIC
+	format  = "binary"
+	address = 0xf6000
+	file    = "basic-1.10.rom"
+}
+
+load {
+	# The PCE ROM extension
+	format  = "binary"
+	address = 0xf0000
+	file    = "ibmpc-pcex.rom"
+}
+
+#load {
+#	# Intel hex file
+#	format = "ihex"
+#	file   = "ibmpc.ihex"
+#}
+
+#load {
+#	# Motorola S-Record file
+#	format = "srec"
+#	file   = "ibmpc.srec"
+#}
+
+
+ems {
+	# The EMS size in bytes
+	size = 8192K
+
+	# The page frame segment
+	segment = 0xe000
+}
+
+
+xms {
+	# The maximum XMS memory used in bytes
+	xms_size = 32M
+
+	# Define one UMB
+	umb_size = 64K
+	umb_segm = 0xd000
+
+	# Enable the HMA
+	hma = 1
+}
+
+
+# Multiple "terminal" sections may be present. The first
+# one will be used unless a terminal type is specified
+# on the command line.
+terminal {
+	driver = "sdl"
+
+	# The terminal escape key. The default is "ESC".
+	#escape = "CtrlRight"
+	#escape = "ESC"
+	#escape = "F12"
+	#escape = "Menu"
+
+	# The initial scale factors
+	scale   = 1
+
+	# The terminal aspect ratio.
+	aspect_x = 4
+	aspect_y = 3
+
+	# Add a border around the image
+	border = 0
+
+	# Start in fullscreen mode.
+	fullscreen = 0
+
+	# The mouse speed. The host mouse speed is multiplied
+	# by (mouse_mul_x / mouse_div_x) and (mouse_mul_y / mouse_div_y)
+	mouse_mul_x = 1
+	mouse_div_x = 1
+	mouse_mul_y = 1
+	mouse_div_y = 1
+}
+
+terminal {
+	driver = "x11"
+
+	# The terminal escape key. The default is "ESC".
+	#escape = "CtrlRight"
+	#escape = "ESC"
+	#escape = "F12"
+	#escape = "Menu"
+
+	# The initial scale factor
+	scale = 1
+
+	# The terminal aspect ratio.
+	aspect_x = 4
+	aspect_y = 3
+
+	# The mouse speed
+	mouse_mul_x = 1
+	mouse_div_x = 1
+	mouse_mul_y = 1
+	mouse_div_y = 1
+}
+
+terminal {
+	driver = "null"
+}
+
+
+# Multiple "video" sections may be present. The first one will be
+# used unless a video adapter type is specified on the command
+# line.
+# Video sections may contain "rom", "ram" and "load" subsections
+# to load ROMs only if a specific video adapter is selected.
+#
+video {
+	# IBM VGA
+	device = "vga"
+
+	# The blink frequency for blinking characters and the
+	# cursor. Setting this to 0 will turn off blinking.
+	blink = 16
+
+	# Enable or disable the vertical retrace interrupt.
+	enable_irq = 0
+	irq        = 2
+
+	rom {
+		# VGA ROM
+		address = 0xc0000
+		size    = 32768
+		default = 0xff
+		file    = "ibmvga.rom"
+	}
+}
+
+video {
+	# IBM EGA
+	device = "ega"
+
+	# The EGA switches select the connected monitor
+	#switches = 0x06	# EGA with CGA monitor (40*25)
+	#switches = 0x07	# EGA with CGA monitor (80*25)
+	#switches = 0x08	# EGA with EGA monitor (CGA mode)
+	switches = 0x09		# EGA with EGA monitor (EGA mode)
+	#switches = 0x0a	# EGA with MDA monitor
+	#switches = 0x0b	# EGA with MDA monitor
+
+	# The blink frequency for blinking characters and the
+	# cursor. Setting this to 0 will turn off blinking.
+	blink = 16
+
+	# Enable or disable the vertical retrace interrupt.
+	enable_irq = 0
+	irq        = 2
+
+	rom {
+		# EGA ROM
+		address = 0xc0000
+		size    = 16384
+		default = 0xff
+		file    = "ibmega.rom"
+	}
+}
+
+video {
+	# IBM CGA
+	device = "cga"
+
+	# Select the built in CGA font
+	#   0 = thick font (default)
+	#   1 = thin font
+	font = 0
+
+	# The blink rate for blinking characters and the
+	# cursor. Setting this to 0 will turn off blinking.
+	blink = 16
+}
+
+video {
+	# Hercules Graphics Card
+	device = "hgc"
+
+	# Set the monitor color.
+	# Valid values are "amber", "green" and "gray".
+	color = "amber"
+
+	#color_background = 0x000000
+	#color_dim = 0x752500
+	#color_normal = 0xca7a2a
+	#color_bright = 0xffcf7f
+	#color_graphics = 0xca7a2a
+
+	# The blink rate for blinking characters and the
+	# cursor. Setting this to 0 will turn off blinking.
+	blink = 16
+}
+
+video {
+	# IBM MDA
+	device = "mda"
+
+	# Set the monitor color.
+	# Valid values are "amber", "green" and "gray".
+	color = "green"
+
+	#color_background = 0x000000
+	#color_dim = 0x005500
+	#color_normal = 0x00aa25
+	#color_bright = 0x55ff7a
+	#color_graphics = 0x00aa25
+
+	# The blink rate for blinking characters and the
+	# cursor. Setting this to 0 will turn off blinking.
+	blink = 16
+}
+
+video {
+	# Plantronics Colorplus
+	device = "plantronics"
+
+	# Select the text mode font:
+	#   0 = Thick font (default)
+	#   1 = Thin font
+	font = 0
+
+	# The blink rate for blinking characters and the
+	# cursor. Setting this to 0 will turn off blinking.
+	blink = 16
+}
+
+video {
+	# Olivetti M24
+	device = "olivetti"
+
+	# Set the monitor type to either color or mono.
+	mono = 0
+
+	# The blink rate for blinking characters and the
+	# cursor. Setting this to 0 will turn off blinking.
+	blink = 16
+}
+
+video {
+	# Wyse 700
+	device = "wy700"
+
+	# Select the text mode font:
+	#   0 = Thick font
+	#   1 = Thin font
+	font = 0
+
+	# The blink rate for blinking characters and the
+	# cursor. Setting this to 0 will turn off blinking.
+	blink = 16
+}
+
+
+speaker {
+	# The speaker volume in the range [0...1000]
+	volume = 500
+
+	# Apply a low-pass filter with the specified cut-off
+	# frequency in Herz. This is separate from the low-pass
+	# filter in the sound driver. If the frequency is 0,
+	# the filter is disabled.
+	lowpass = 8000
+
+	# The sample rate at which sound is sent to the sound driver.
+	sample_rate = 44100
+
+	#driver = "null"
+	#driver = "wav:wav=speaker.wav:lowpass=0:wavfilter=0"
+	#driver = "oss:dev=/dev/dsp:wav=speaker.wav:lowpass=0:wavfilter=0"
+	driver = "sdl:wav=speaker.wav:lowpass=0:wavfilter=0"
+}
+
+
+covox {
+	# Disable the covox DAC
+	mode = "none"
+
+	# A simple covox DAC
+	#mode = "covox"
+
+	# Disney sound source
+	#mode = "disney"
+
+	# The volume in the range [0...1000]
+	volume = 500
+
+	# Apply a low-pass filter with the specified cut-off
+	# frequency in Herz. This is separate from the low-pass
+	# filter in the sound driver. If the frequency is 0,
+	# the filter is disabled.
+	lowpass = 3000
+
+	# The sample rate at which sound is sent to the sound driver.
+	sample_rate = 44100
+
+	# The parallel port
+	parport = 1
+
+	driver = "wav:wav=covox.wav:lowpass=0:wavfilter=0"
+}
+
+
+# Up to 4 serial ports can be defined
+serial {
+	address = 0x3f8			# COM1
+	irq     = 4
+
+	# Valid values for uart are: "8250", "16450"
+	uart = "8250"
+
+	# Read and/or write up to multichar characters per character time,
+	# in essence multiplying the port speed by multichar. Most programs
+	# can't handle values greater than 1.
+	multichar = 1
+	#multichar_read = 1
+	#multichar_write = 1
+
+	# Not all character drivers are supported on
+	# all platforms.
+	#driver = "mouse:xmul=1:xdiv=1:ymul=1:ydiv=1"
+	#driver = "null"
+	#driver = "posix:file=serport1.out"
+	#driver = "pty:symlink=com1"
+	driver = "stdio:file=serport1.out:flush=1"
+	#driver = "tios:file=/dev/ttyS0"
+	#driver = "tcp:port=5555:telnet=1:telnetinit=1:usectl=1"
+
+	# Log all traffic to this file. This is for debugging.
+	#log = "serport1.log"
+}
+
+serial {
+	address   = 0x2f8		# COM2
+	irq       = 3
+	uart      = "8250"
+	multichar = 16
+	driver    = "mouse"
+}
+
+
+# Up to 4 parallel ports can be defined
+parport {
+	# LPT1
+	address = 0x378
+
+	driver = "stdio:file=parport1.out"
+}
+
+parport {
+	# LPT2
+	address = 0x278
+
+	driver = "stdio:file=parport2.out"
+}
+
+
+# The cassette interface
+#
+# There are two separate tape images, one for reading and one for
+# writing. Data is read from the read image at the current position
+# and written to the end of the write tape.
+# If a separate read tape image is not specified, data will be read
+# from the write tape at the current position.
+cassette {
+	enable = 1
+
+	# The tape image file. The file will be created if
+	# it does not exist.
+	# Setting this is equivalent to setting a write image and
+	# not setting a read image.
+	file = "cas1.pti"
+
+	# The read tape image.
+	#read = "cas1.pti
+
+	# The write tape image.
+	#write = "cas1.pti"
+}
+
+
+# The floppy disk controller
+fdc {
+	# Optional AT DD rate matching, independently for drive0_rpm through
+	# drive3_rpm: 300 RPM requires 250 kbit/s; 360 RPM requires 300 kbit/s.
+	# Default 0 accepts both rates. This does not change physical rotation
+	# or stepping, and legacy XT adapters ignore it.
+	#drive0_rpm = 300
+
+	address = 0x3f0
+	irq     = 6
+
+	# Map PCE drives to FDC drives. FDC drives that have no PCE
+	# drive assigned to them will be handled by the PCE int 13
+	# handler.
+	#drive0 = 0x00
+	drive1 = 0x01
+	drive2 = 0x02
+	drive3 = 0x03
+
+	# Set the verbosity level. A level of 0 produces no output, higher
+	# levels produce more output. Levels above 2 are insane. The highest
+	# level is 5.
+	verbose = 0
+
+	# Enable or disable accurate timing.
+	# If accurate timing is enabled, the CPU speed should be set to
+	# 1, otherwise timeout errors will occur.
+	accurate = 0
+
+	# Ignore the end of track value.
+	# If this option is enabled, multi-track operations will no longer
+	# work, but floppy disks with more than 8 or 9 sectors per track
+	# can be used even with older BIOSes.
+	ignore_eot = 0
+
+	# Specify single sided drives
+	# This option is a bit mask, with the least significant bit
+	# corresponding to drive 0. Set bits indicate single sided drives.
+	single_sided = 0
+}
+
+
+if (cfg.hdc) {
+	rom {
+		address = 0xc8000
+		size    = 32K
+		default = 0xff
+	}
+
+	load {
+		# The hard disk BIOS
+		format  = "binary"
+		address = 0xc8000
+		file    = "ibm-hdc-1985-10-28.rom"
+	#	file    = "sms-hdc-1986.rom"
+	#	file    = "dtc-hdc-1988-05-31.rom"
+	}
+
+	# The XT hard disk controller
+	hdc {
+		address = 0x320
+		irq     = 5
+
+		# Map PCE drives to HDC drives.
+		drive0  = 0x80
+		drive1  = 0x81
+
+		# The number of sectors per track.
+		# Most BIOSes get confused if this is anything other than
+		# 17 for MFM controllers and 26 for RLL controllers.
+		sectors = 17
+
+		# IBM BIOS (1985-10-28)
+		#
+		# Configuration switches:
+		#   bits 0-1: Drive 1 type
+		#   bits 2-3: Drive 0 type
+		#   bits 4-7: Unused
+		#
+		# Drive types:
+		#   0: 306/4/17
+		#   1: 612/4/17
+		#   2: 615/4/17
+		#   3: 306/8/17
+		#
+		switches  = 0x00
+
+		# SMS BIOS (1986)
+		#
+		# Configuration switches:
+		#   bits 0-3: Drive type (for both drives)
+		#   bits 4-7: Unused
+		#
+		# Drive types:
+		#   0: 918/15/17     8: 640/4/17
+		#   1: 612/ 4/17     9: 512/8/17
+		#   2: 987/ 7/17    10: 612/2/17
+		#   3: 697/ 5/17    11: 612/2/17
+		#   4: 306/ 4/17    12: 615/4/17
+		#   5: 977/ 5/17    13: 612/4/17
+		#   6: 733/ 5/17    14: 612/2/17
+		#   7: 640/ 6/17    15: 306/4/17
+		#
+		#switches  = 0x0f
+
+		# DTC 5150X CXD21A BIOS (1988-05-31)
+		#
+		# Configuration switches:
+		#   bits 0-1: Drive 1 type (bits 0-1)
+		#   bits 2-3: Drive 0 type (bits 0-1)
+		#   bits 4-5: Drive 1 type (bits 2-3)
+		#   bits 6-7: Drive 0 type (bits 2-3)
+		#
+		# Drive types:
+		#   0: 615/ 4/17     8:  977/ 5/17
+		#   1: 733/ 5/17     9:  820/ 6/17
+		#   2: 615/ 4/17    10:  612/ 4/17
+		#   3: 306/ 4/17    11: 1024/ 5/17
+		#   4: 987/ 5/17    12: 1024/ 8/17
+		#   5: 987/ 7/17    13: 1024/ 9/17
+		#   6: 615/ 4/17    14:  918/15/17
+		#   7: 615/ 6/17    15: user type
+		#
+		#switches  = 0xff
+		#config_id = "DTCCXD01"
+	}
+}
+
+
+# Disk types are:
+# "image"  A raw image file. "c", "h" and "s" must be specified.
+# "dosemu" A DOSEMU style hard disk image file.
+# "pce"    A PCE style disk image file.
+# "ram"    A RAM disk. If a file name is specified, the contents
+#          of that file are loaded into the RAM disk (but the file
+#          is never altered).
+# "auto"   Try to autodetect the image file format. This works for
+#          DOSEMU and PCE disk images as well as raw images starting
+#          with a DOS boot sector.
+#
+# The drive number is the number used by the BIOS, so 128 is the
+# first hard disk, 0 is the first floppy disk.
+#
+# The c, h, s parameters determine the actual image file layout, the
+# visible_c, visible_h, visible_s parameters determine the disk size
+# as reported by the BIOS.
+#
+# If multiple file names are specified, they will be tried in order
+# until one of them can be opened.
+#
+# If optional is set to 1 no error will be reported if the disk
+# can't be opened.
+#
+# If there is more than one entry for the same drive, the first
+# one that can be successfully opened will be used and all others
+# ignored.
+#
+# If a COW (copy on write) file is specified, changes to the disk
+# image are written to that file and the image is not touched.
+
+# The first floppy drive
+disk {
+	drive    = 0
+	optional = 1
+	type     = "auto"
+	file     = "drv_00.img"
+	file     = "fd0.img"
+	file     = "fd0.pfdc"
+}
+
+# The second floppy drive
+disk {
+	drive    = 1
+	optional = 1
+	type     = "auto"
+	file     = "drv_01.img"
+	file     = "fd1.img"
+	file     = "fd1.pfdc"
+}
+
+#disk {
+#	drive    = 0
+#	optional = 1
+#	type     = "image"
+#	file     = "drv_00.img"
+#	offset   = 0
+#	c        = 80
+#	h        = 2
+#	s        = 18
+#}
+
+# The first harddisk
+disk {
+	drive    = 128
+	type     = "auto"
+	file     = "drv_80.img"
+#	cow      = "drv_80.cow"
+	readonly = 0
+	optional = 1
+}
+
+# The first harddisk (alternate)
+disk {
+	drive    = 128
+	type     = "auto"
+	file     = "hd0.img"
+	file     = "hd0.qed"
+#	cow      = "hd0.cow"
+	readonly = 0
+	optional = 1
+}
+
+# The second harddisk
+disk {
+	drive    = 129
+	type     = "auto"
+	file     = "hd1.img"
+	file     = "hd1.qed"
+	file     = "drv_81.img"
+#	cow      = "hd1.cow"
+	readonly = 0
+	optional = 1
+}
+
+
+# =============================================================================
+# IBM PC/AT (5170) example configuration
+# -----------------------------------------------------------------------------
+# To use: set system.model = "5170", use cpu.model = "80286", add the
+# cmos section below, and point the load sections at your AT BIOS ROM.
+#
+# Typical AT memory map:
+#   0xC0000  VGA ROM (24K)
+#   0xC8000  PCE extension ROM (optional, reserve 8K if used)
+#   0xF0000  AT BIOS (64K, as in the tested IBM/AMI configurations)
+# Do not overlay PCEX or a separate ROM BASIC image on the AT BIOS.
+# See tests/at-5170.cfg and tests/at-5170-ami.cfg for complete native examples.
+# For the tested AMI assisted DOS hard-disk setup, load PCEX at 0xC8000,
+# set boot=128 and patch_bios_int19=1; keep patch_bios_init=0.
+# Native AT disks: bind an existing disk number explicitly, e.g.
+# wd1003 { drive0 = 128 }
+# cmos { hard_disk0_type = 4 }
+# The disk image CHS must match the BIOS type (type 4: 940/8/17).
+# Types 1-14 are supported; 0 means absent. A saved CMOS file overrides these.
+# Use patch_bios_init=0 and patch_bios_int19=0 for native boot.
+# Normal 512-byte CHS read/write/verify are implemented. Format-track and
+# long/ECC commands abort; timing is approximate. Empty wd1003 {} is diskless.
+# =============================================================================
+
+#system {
+#	model = "5170"
+#	boot  = 0          # 0=floppy, 128=HDD
+#	memtest = 1
+#	floppy_disk_drives = 2
+#	patch_bios_init  = 0  # preserve native AT reset/resume
+#	patch_bios_int19 = 0  # native disk boot; assisted DOS option above
+#}
+
+#cpu {
+#	model = "80286"
+#	speed = 0
+#}
+
+# AT CMOS / RTC — optional persistent NVRAM file
+# Omit the "cmos" section entirely to use a volatile (reset-each-boot) RTC.
+# Equipment bytes (floppy types, RAM sizes, display, checksum) are always
+# auto-populated from the current config at startup via
+# pc_cmos_populate_from_config().  If a "file" is present it is loaded
+# afterwards, letting a saved guest CMOS take full precedence.
+#cmos {
+#	# Path to persistent NVRAM image (64 bytes, created on first run if absent).
+#	# Generate a fresh image with: python3 tools/make-cmos.py -o at-cmos.nvr
+#	#file = "at-cmos.nvr"
+#
+#	# Force a specific start time instead of syncing to the host clock.
+#	# Format: "YYYY-MM-DD HH:MM:SS"
+#	#start = "1990-01-01 00:00:00"
+#
+#	# Set to 0 to preserve the RTC time saved in the .nvr file across
+#	# restarts (useful for reproducible test scenarios).
+#	# Default: 1 (always sync to host clock or "start" on every boot).
+#	sync_rtc_on_start = 1
+#}

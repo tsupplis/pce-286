@@ -1,0 +1,37 @@
+#!/bin/sh
+# demos/run-at-soak — launch the IBM PC/AT (5170) soak environment
+#
+# Boots DOS from images/dos.img using the AT config.
+# Window: SDL (press F12 to toggle mouse capture, close window to quit).
+#
+# Usage:
+#   demos/run-at-soak              # interactive SDL window
+#   demos/run-at-soak -R           # headless
+
+set -e
+
+# Resolve project root from script location
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+EMULATOR="$ROOT/src/arch/ibmpc/pce-ibmpc"
+CONFIG="$ROOT/tests/at-5170-ami.cfg"
+DISK="$ROOT/images/dos.img"
+
+if [ ! -x "$EMULATOR" ]; then
+    echo "ERROR: $EMULATOR not found — run 'make' first" >&2
+    exit 1
+fi
+
+if [ ! -f "$DISK" ]; then
+    echo "ERROR: $DISK not found — run 'make check-images' first" >&2
+    exit 1
+fi
+
+exec "$EMULATOR" "$@" \
+    -I "path = \"$ROOT/testroms\"" \
+    -c "$CONFIG" \
+    -I "disk {" \
+    -I "drive = 0" \
+    -I 'type = "auto"' \
+    -I "file = \"$DISK\"" \
+    -I "}" 

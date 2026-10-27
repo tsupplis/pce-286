@@ -1,0 +1,174 @@
+Character drivers
+=================
+
+The syntax of a character driver specification is:
+
+<driver>:<option1>=<value1>:<option2>=<value2>...
+
+White space around option names and values is ignored. If a value contains
+a colon, it must be escaped by repeating it.
+
+If a file name is prefixed by an '@' character, the file is opened for
+appending instead of truncated.
+
+
+These options can be used with any character driver:
+	cap=[@]<filename>
+		Copy the output to the character driver to <filename>.
+
+	log=[@]<filename>
+		Log input and output to <filename>.
+
+
+The following is a list of character drivers and their options:
+
+mouse:
+	A serial mouse. If more than one mouse is configured, all mice
+	will report the same movements and button presses.
+
+	protocol=<proto>
+		Set the mouse protocol. Valid values are:
+
+		microsoft
+			A Microsoft two button serial mouse.
+
+		msys
+			A Mouse Systems three button serial mouse.
+
+		The default is "ms".
+
+	xmul=<int>
+	ydiv=<int>
+		The horizontal mouse speed is multiplied by (xmul / xdiv).
+
+	ymul=<int>
+	ydiv=<int>
+		The vertical mouse speed is multiplied by (ymul / ydiv).
+
+
+null:
+	Output is discarded and no input is ever provided.
+
+posix:
+	The "read" and "write" options are used only if "file" is not
+	set.
+
+	file=<filename>
+		Set the input and output file name.
+
+	file=-
+		Read input from stdin, write output to stdout.
+
+	file=--
+		Read input from stdin, write output to stderr.
+
+	read=<filename>
+		Set the input file name.
+
+	read=-
+		Read input from stdin.
+
+	write=<filename>
+		Set the output file name.
+
+	write=-
+		Write output to stdout.
+
+	write=--
+		Write output to stderr.
+
+
+ppp:
+	For this driver to work, tun/tap support must be enabled.
+
+	if=<name>
+		Set the tun/tap interface name, for example "tun0".
+
+	host-ip=<ip-addr>
+		Set the host side IP address.
+
+	guest-ip=<ip-addr>
+		Set the guest side IP address.
+
+
+pty:
+	symlink=<filename>
+		Create a symlink pointing to the new pseudo terminal device.
+
+
+slip:
+	For this driver to work, tun/tap support must be enabled.
+
+	if=<name>
+		Set the tun/tap interface name, for example "tun0".
+
+
+stdio:
+	Output is written to a file. Input is read from a file.
+
+	append=[0|1]
+		If true, open the output file for appending instead of
+		truncating it.
+
+	file=<filename>
+		Set the output file name.
+
+	file=-
+		Use standard output as output.
+
+	flush=[0|1]
+		If true, flush the output file whenever data is written.
+
+	read=<filename>
+		Set the input file name.
+
+	write=<filename>
+		Set the output file name. This option is synonymous to
+		the "file" options.
+
+
+tcp:
+	connect=[0|1]
+		If true, initiate a connection to the host and port
+		specified in the host and port options. Otherwise
+		wait for connections to the port specified in the
+		port option.
+
+	host=<hostname>
+		Set the host name to connect to if connect is true.
+
+	port=<port>
+		Set the TCP port number.
+
+	telnet=[0|1]
+		If true, will handle option negotiation for telnet
+		binary and character mode. Useful when the serial
+		line is a tty, to provide proper terminal emulation.
+
+	telnetinit=[0|1]
+		If this and "telnet" are true, initiate telnet option
+		negotiations immediately after accepting a connection.
+		Common telnet clients need this when connecting to
+		a port other than 23. Defaults to true.
+
+	usectl=[0|1]
+		If true, modem status lines are properly handled in
+		both directions. Specifically, DSR is always asserted,
+		CTS and CD are only asserted when a client is
+		connected to the TCP port, and flashing DTR causes the
+		TCP connection to close. This is useful when the
+		serial line is a tty, to close the connection when
+		logged out and, conversely, to log out when the
+		connection is closed manually. Defaults to true.
+
+tios:
+	file=<filename>
+		The character device to connect to
+
+wincom:
+	Windows COM port support. This driver is only available under
+	Windows.
+
+	port=<port>
+		Set the windows COM port to use, for example "COM1" or
+		"COM2".

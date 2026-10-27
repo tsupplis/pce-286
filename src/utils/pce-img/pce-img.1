@@ -1,0 +1,166 @@
+.TH PCE-IMG 1 "2018-02-20" "HH" "pce"
+\
+.SH NAME
+pce-img \- the PCE disk image utility
+
+.SH SYNOPSIS
+.BI "pce-img commit" " [options] base [cow...]"
+.PP
+.BI "pce-img convert" " [options] source target"
+.PP
+.BI "pce-img cow" " [options] base [cow...]"
+.PP
+.BI "pce-img create" " [options] [target...]"
+.PP
+.BI "pce-img info" " [options] [source...]"
+.PP
+.BI "pce-img rebase" " [options] source base target
+
+.SH DESCRIPTION
+\fBpce-img\fR(1) is used to create and convert disk image files.
+
+.SH OPTIONS
+
+.TP
+.BI "-c, --cylinders " cylinders
+Set the number of cylinders. If \fIcylinders\fR is \fBauto\fR then the number
+of cylinders is calculated from the image size, the number of heads
+and the number of sectors per track.
+.TP
+.BI "-C, --min-cluster-size " size
+Set the minimum allocation block size for \fBpbi\fR and \fBqed\fR images.
+The actual size used will not be smaller than \fIsize\fR, but it may
+be larger. The default is 0.
+.TP
+.BI "-f, --offset " offset
+Set the starting offset of raw disk images.
+.TP
+.BI "-g, --geometry " "cylinders heads sectors"
+Set the disk geometry. This is the same as using the \fB-c\fR,
+\fB-h\fR and \fB-s\fR options.
+.TP
+.BI "-h, --heads " heads
+Set the number of heads. If \fIheads\fR is \fBauto\fR then the number of
+heads is calculated from the image size, the number of cylinders and
+the number of sectors per track.
+.TP
+.BI "-i, --input " filename
+Set the input file name.
+.TP
+.BI "-I, --input-type " type
+Set the input file type. Supported input types are:
+.RS
+.TP
+.B chd
+MAME CHD disk image. Only uncompressed version 5 images are supported.
+.TP
+.B dosemu
+DOSEMU disk image
+.TP
+.B pbi
+PCE block image
+.TP
+.B pimg
+Old PCE disk image
+.TP
+.B qed
+QEMU QED disk image
+.TP
+.B raw, img
+Raw disk image
+.RE
+.TP
+.BI "-n, --size " size
+Set the disk image size. The following suffixes to \fIsize\fR are recognized:
+.RS
+.TP
+.B B
+Bytes (1)
+.TP
+.B K
+KiB (1024)
+.TP
+.B M
+MiB (1024^2)
+.TP
+.B G
+GiB (1024^3)
+.TP
+.B T
+TiB (1024^4)
+.TP
+.B none
+Blocks (512)
+.RE
+.TP
+.BI "-o, --output " filename
+Set the output file name.
+.TP
+.BI "-O, --output-type " type
+Set the output file type. Supported input types are:
+.RS
+.TP
+.B dosemu
+DOSEMU disk image
+.TP
+.B pbi
+PCE block image
+.TP
+.B pimg
+Old PCE disk image
+.TP
+.B qed
+QEMU QED disk image
+.TP
+.B raw, img
+Raw disk image
+.RE
+.TP
+.B "-q, --quiet"
+Quiet operation.
+.TP
+.BI "-s, --sectors " sectors
+Set the number of sectors per track. If \fIsectors\fR is \fBauto\fR then
+the number of sectors per track is calculated from the image size, the
+number of cylinders and the number of heads.
+.TP
+.BI "-w, --cow " filename
+Add a COW image on top of the last input or output image.
+.TP
+.BI "-W, --cow-type " type
+Set the COW file type. Supported COW types are:
+.RS
+.TP
+.B pbi
+PCE block image
+.TP
+.B qed
+QEMU QED disk image
+.RE
+.TP
+.B --help
+Print usage information.
+.TP
+.B --version
+Print version information.
+
+.SH EXAMPLES
+Create a 1 GiB PIMG image:
+.IP
+$ pce-img create -n 1024M -o image.pimg
+.PP
+Create a 10 MB PIMG image
+.IP
+$ pce-img create -g 306 4 17 -o image.pimg
+.PP
+Convert a PIMG image to a raw image
+.IP
+$ pce-img convert source.pimg dest.img
+
+.SH SEE ALSO
+.BR pce-ibmpc "(1),"
+.BR pce-macplus "(1),"
+.BR pfdc "(1)"
+
+.SH AUTHOR
+Hampa Hug <hampa@hampa.ch>
