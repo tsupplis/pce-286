@@ -1,11 +1,8 @@
 # tests/Makefile.inc
 #
-# C-level unit tests and end-to-end NASM regression tests for the CPU
-# emulation.  Driven by:
-#   make check         — build everything, run all C-unit tests, then if
-#                        pce-ibmpc and images/dos.img exist also run the
-#                        NASM end-to-end tests.
-#   make check-build   — compile only, do not run anything
+# C component, CPU guest and native AT regression tests.
+# See README.md or `make check-help` for suites and external prerequisites.
+# Native tests never require the OS/2 or daily XT sample installations.
 #
 
 rel := tests
@@ -297,10 +294,10 @@ IMG_TEXTMEM  := images/textmem.img
 IMG_TLOADALL := images/tloadall.img
 CLN += $(IMG_T186) $(IMG_T286) $(IMG_TV20) $(IMG_TA20) $(IMG_TPROT) $(IMG_TEXTMEM) $(IMG_TLOADALL)
 
-# 'make check-images' — build the four fixed test floppy images.
+# 'make check-images' — build the seven fixed CPU test floppy images.
 # Depends on the .com files and pceexit.com being up to date.
 .PHONY: check-images
-check-images: $(ASM_TEST_COMS)
+check-images: $(ASM_TEST_COMS) src/arch/ibmpc/pceutils/pceexit.com
 	$(QP)echo "  IMAGES build test floppy images"
 	$(QR)sh tests/build_images.sh
 
@@ -525,6 +522,6 @@ check-help:
 	 'check-all: check plus full-RAM/floppy soaks; adds disk/PM when AT_DISK_IMAGE is set' \
 	 'Overrides: TEST_EMULATOR, AT_TEST_DIR, AT_TIMEOUT, AT_SOAK_CYCLES, AT_SOAK_ROUNDS, AT_PM_RUNS'
 
-DIST += $(addsuffix .c,$(TEST_BINS)) tests/guest_runner.py tests/run_e2e.py \
+DIST += $(addsuffix .c,$(TEST_BINS)) tests/build_images.sh tests/guest_runner.py tests/run_e2e.py \
  tests/run_at_tests.py tests/test.cfg tests/at-5170.cfg tests/at-5170-ami.cfg \
  tests/asm/tataccept.asm tests/asm/tfloppysoak.asm tests/asm/tpmsoak.asm

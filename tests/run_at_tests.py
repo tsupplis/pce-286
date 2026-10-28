@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Makefile entry point for native AT tests; no sample installations required."""
 import argparse
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -25,16 +26,22 @@ def main():
     a = p.parse_args()
     if a.timeout is not None and a.timeout <= 0:
         p.error('--timeout must be positive')
-    if not a.emulator.is_file():
+    if a.cycles < 1 or not 1 <= a.rounds <= 65535 or not 1 <= a.runs <= 10:
+        p.error('positive cycles, rounds in 1..65535 and runs in 1..10 required')
+    if not a.emulator.is_file() or not os.access(a.emulator, os.X_OK):
         p.error(f'emulator not found: {a.emulator}; build pce-ibmpc first')
     if a.suite == 'disk' and (a.disk is None or not a.disk.is_file()):
         p.error('set AT_DISK_IMAGE to a standalone bootable DOS FAT16 hard-disk image')
     if a.suite == 'pm' and (a.fixture is None or not all((a.fixture / n).is_file()
                                                        for n in ('hd.img', 'native.cfg'))):
         p.error('native disk fixture missing; run make check-at-disk AT_DISK_IMAGE=/path/to/disk.img')
-    tools = ['nasm', 'mcopy'] if a.suite == 'pm' else ['mcopy', 'mformat']
-    if a.suite in ('acceptance', 'floppy', 'disk'):
+    tools = ['mcopy']
+    if a.suite in ('boot', 'acceptance', 'floppy'):
+        tools.append('mformat')
+    if a.suite != 'boot':
         tools.append('nasm')
+    if a.suite in ('disk', 'floppy'):
+        tools.append('mtype')
     required = []
     if a.suite != 'pm':
         bios = 'ami-at-158c.rom' if a.suite == 'disk' or a.bios == 'ami' else 'ibm-at-1985-11-15-02.rom'
