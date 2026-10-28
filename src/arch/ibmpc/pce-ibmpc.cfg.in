@@ -36,6 +36,7 @@ system {
 	# Enable or disable the POST memory test. If this option
 	# is set to 0, 0x1234 is written to 0040:0072, simulating
 	# a restart instead of a cold start.
+	# AT warm-start simulation also sets 8042 SYS while the RAM marker is valid.
 	memtest = 1
 
 	# The number of floppy disk drives.

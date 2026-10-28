@@ -49,6 +49,7 @@ ibmpc_t *new_machine_config (const char *system, const char *cpu, unsigned rom_f
 	ini_set_str (cfg, "system.model", system);
 	ini_set_uint32 (cfg, "system.patch_bios_init", 0);
 	ini_set_uint32 (cfg, "system.patch_bios_int19", 0);
+	ini_set_uint32 (cfg, "system.memtest", (rom_flags & 64) ? 0 : 1);
 	ini_set_str (cfg, "cpu.model", cpu);
 	ini_set_uint32 (cfg, "cpu.speed", 1);
 	ini_set_uint32 (cfg, "ram.address", 0);
@@ -1299,6 +1300,36 @@ void check_shutdown_reset (const char *system)
 }
 
 static
+void check_memtest_startup (void)
+{
+	static const char *systems[] = { "5160", "5170" };
+	unsigned i, warm;
+
+	for (i = 0; i < 2; i++) {
+		for (warm = 0; warm < 2; warm++) {
+			ibmpc_t *pc = new_machine_config (systems[i], "80286", warm ? 64 : 0);
+			if (pc == NULL) continue;
+			check_value ("memtest startup marker", mem_get_uint16_le (pc->mem, 0x472),
+				warm ? 0x1234 : 0);
+			if (i == 1) {
+				check_value ("memtest startup SYS", mem_get_uint8 (pc->prt, 0x64) & 4,
+					warm ? 4 : 0);
+				check_value ("warm start has no synthetic controller reply",
+					pc->at_kbd.obuf_full, 0);
+				pc_reset (pc);
+				check_value ("memtest reset retains matching SYS",
+					mem_get_uint8 (pc->prt, 0x64) & 4, warm ? 4 : 0);
+				/* A cleared RAM marker must not claim a previous warm POST. */
+				mem_set_uint16_le (pc->mem, 0x472, 0);
+				pc_reset (pc);
+				check_value ("cleared marker resets SYS", mem_get_uint8 (pc->prt, 0x64) & 4, 0);
+			}
+			pc_del (pc);
+		}
+	}
+}
+
+static
 void check_rtc_periodic (void)
 {
 	mc146818a_t rtc;
@@ -1339,6 +1370,7 @@ int main (void)
 	}
 	check_shutdown_reset ("5170");
 	check_shutdown_reset ("5160");
+	check_memtest_startup ();
 	check_rtc_periodic ();
 	check_at_floppy ();
 	check_at_storage ();

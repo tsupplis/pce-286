@@ -101,7 +101,12 @@ void pc_at_kbd_init (ibmpc_t *pc)
 	pc->at_kbd.obuf      = 0;
 	pc->at_kbd.obuf_full = 0;
 	pc->at_kbd.obuf_irq  = 0;
-	pc->at_kbd.sys       = 0;    /* SYS bit clear until self-test passes */
+	/* memtest=0 requests a simulated warm start. AMI checks 8042 SYS
+	 * before trusting the BIOS RAM marker; both must describe that start.
+	 * Cold starts and resets after the guest clears the marker still need
+	 * the normal controller self-test. No reply is fabricated here. */
+	pc->at_kbd.sys = !pc->memtest &&
+		(mem_get_uint16_le (pc->mem, 0x0472) == 0x1234);
 	pc->at_kbd.cfg       = 0x05; /* kbd clock/data enabled, IRQ1 enabled */
 	pc_at_kbd_update_irq (pc);
 }

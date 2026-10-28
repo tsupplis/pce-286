@@ -50,6 +50,12 @@ Configuration
 PCE/ibmpc is configured by means of a config file. A documented example config
 file is installed in $(prefix)/etc/pce-ibmpc.cfg.
 
+The system.memtest value controls simulated startup: 1 requests normal cold
+POST; 0 seeds the BIOS warm-start marker. On AT machines, the 8042 SYS flag
+also reflects that simulated warm start while the marker is valid, allowing
+BIOSes such as AMI to recognise it. The BIOS determines which POST tests are
+skipped; this is not a separate abbreviated RAM-test implementation.
+
 The cpu.speed value (also the -s option) is an integer multiplier of the
 4.77 MHz base clock, not a frequency in MHz. A value of 1 supplies four CPU
 clocks per PIT clock; 2 supplies eight (~9.55 MHz nominal); 8 supplies 32
