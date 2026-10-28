@@ -103,3 +103,12 @@ repair evidence](8080-review.md).
 `test_nec_8080` adds 564 transition, mapping, bus and bounded-guest checks to the
 global gate. [Mode coverage and remaining limits](nec-8080-mode.md) supersede
 previous statements that NEC 8080 mode was not implemented.
+
+### Real-mode 286 interrupt-stack wrapping (2026-10-28)
+
+`test_286_prot` covers INT/IRET frames at SP 0 through 8 and near FFFFh,
+including wrapped even offsets, shutdown at odd SP 1/3/5 without partial stack
+writes, and cached short/expand-down SS limits. The old CPU fails four cases.
+This closes the DR DOS DOSKEY startup reboot observed on the native AT setup.
+See `tests/memory-validation/drdos-int-stack-20261028/findings.txt` for traces,
+Intel PRM references and the DR DOS/XT/OS2 acceptance scope.

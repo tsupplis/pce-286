@@ -429,16 +429,23 @@ void e86_trap (e8086_t *c, unsigned n)
 		e86_interrupt_pm(c,n,ip);
 	}
 	else {
-		/* A 286 cannot build a real-mode interrupt frame across the segment
-		 * boundary. A fault with no usable exception stack shuts the CPU down. */
+		/* Real-mode SP wraps between word pushes. Only a word that straddles
+		 * FFFF:0000 is invalid (SP=1,3,5 for a six-byte INT frame).
+		 * Preflight each wrapped word, retaining cached SS limit checks. */
 		if ((c->cpu & (E86_CPU_FLAGS286|E86_CPU_INT6)) == (E86_CPU_FLAGS286|E86_CPU_INT6)) {
 			unsigned sp=e86_get_sp(c), ar=c->seg_ar[E86_REG_SS], limit=c->seg_limit[E86_REG_SS];
 			if ((n & 0xff)*4+3 > c->idtr_limit) {
 				e86_fault(c,13);return;
 			}
-			if (sp<6 || (ar&0x9a)!=0x92 ||
-			    ((ar&4) ? sp-6<=limit : sp-1>limit)) {
+			unsigned i;
+			if ((ar&0x9a)!=0x92) {
 				c->state=E86_STATE_SHUTDOWN;return;
+			}
+			for (i=2; i<=6; i+=2) {
+				unsigned ofs=(sp-i)&0xffff;
+				if (ofs==0xffff || ((ar&4) ? ofs<=limit : ofs+1>limit)) {
+					c->state=E86_STATE_SHUTDOWN;return;
+				}
 			}
 		}
 		e86_push(c,e86_get_flags(c));

@@ -596,6 +596,58 @@ static void check_nested_faults(void)
  }
 }
 
+/* Intel 286 PRM, INT/INTO real-mode exceptions: only SP=1,3,5
+ * strand a pushed word across FFFF:0000. Even pointers wrap between words. */
+static void check_real_interrupt_wrap (void)
+{
+ static const unsigned points[]={0,1,2,3,4,5,6,7,8,0xfffc,0xfffe,0xffff};
+ unsigned i;
+ for(i=0;i<sizeof points/sizeof points[0];i++) {
+  e8086_t *c=make_286();
+  unsigned sp=points[i], next=(sp-6)&0xffff, flags, j;
+  unsigned bad=sp==1 || sp==3 || sp==5;
+  memset(ram,0,sizeof ram);memset(ram+0x20000,0xa5,0x10000);
+  e86_set_ss(c,0x2000);e86_set_sp(c,sp);c->flg|=E86_FLG_I|2;
+  flags=e86_get_flags(c);
+  ram[0x100]=0xcd;ram[0x101]=0x1a;ram[0x300]=0xcf;
+  w16(NULL,0x1a*4,0x300);w16(NULL,0x1a*4+2,0);
+  e86_execute(c);
+  if(bad) {
+   CHECK("odd short INT stack shuts down",c->state&E86_STATE_SHUTDOWN);
+   CHECK_VAL("bad INT preserves SP",e86_get_sp(c),sp);
+   for(j=0;j<0x10000;j++)if(ram[0x20000+j]!=0xa5)break;
+   CHECK_VAL("bad INT preserves stack bytes",j,0x10000);
+  } else {
+   CHECK_VAL("valid real INT is not shutdown",c->state&E86_STATE_SHUTDOWN,0);
+   if(!(c->state&E86_STATE_SHUTDOWN)) {
+    CHECK_VAL("wrapped INT handler",e86_get_ip(c),0x300);
+    CHECK_VAL("wrapped INT SP",e86_get_sp(c),next);
+    CHECK_VAL("wrapped INT return IP",r16(NULL,0x20000+next),0x102);
+    CHECK_VAL("wrapped INT return CS",r16(NULL,0x20000+((next+2)&0xffff)),0);
+    CHECK_VAL("wrapped INT saved flags",r16(NULL,0x20000+((next+4)&0xffff)),flags);
+    e86_execute(c);
+    CHECK_VAL("wrapped IRET return IP",e86_get_ip(c),0x102);
+    CHECK_VAL("wrapped IRET restores SP",e86_get_sp(c),sp);
+    CHECK_VAL("wrapped IRET restores flags",e86_get_flags(c),flags);
+   }
+  }
+  e86_del(c);
+ }
+ /* Cached segment limits remain enforced even when the pointer can wrap. */
+ for(i=0;i<2;i++) {
+  e8086_t *c=make_286();memset(ram,0,sizeof ram);
+  e86_set_ss(c,0x2000);e86_set_sp(c,i ? 0 : 2);
+  c->seg_limit[E86_REG_SS]=i ? 0xfff9 : 0xff;
+  if(i)c->seg_ar[E86_REG_SS]=0x97;
+  ram[0x100]=0xcd;ram[0x101]=0x1a;
+  w16(NULL,0x1a*4,0x300);
+  e86_execute(c);
+  CHECK_VAL("real INT respects cached stack limits",
+    (c->state&E86_STATE_SHUTDOWN)!=0,!i);
+  e86_del(c);
+ }
+}
+
 static void check_real_mode_bounds(void)
 {
  unsigned cpu;
@@ -781,6 +833,7 @@ int main (void)
 	check_near_bounds ();
 	check_task_rejection ();
 	check_nested_faults ();
+	check_real_interrupt_wrap ();
 	check_real_mode_bounds ();
 	check_invalid_and_nm ();
 	check_bound_restart ();
