@@ -109,8 +109,5 @@ Install NASM before running `./configure` so the build detects it. End-to-end
 tests are skipped if NASM, the emulator, or the required images are missing;
 check the output for `SKIP` messages.
 
-See [CPU regression and conformance coverage](tests/cpu-compliance.md) for
-coverage details and regression logs.
-
 have fun
 Hampa Hug <hampa@hampa.ch>
