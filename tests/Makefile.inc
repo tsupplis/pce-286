@@ -10,6 +10,8 @@
 
 rel := tests
 
+TEST_EMULATOR ?= src/arch/ibmpc/pce-ibmpc
+
 DIRS += $(rel)
 DIST += $(rel)/Makefile.inc $(rel)/test_ibmpc_memory.c $(rel)/test_ibmpc_exit.py $(rel)/test_at_kbd.c
 
@@ -20,6 +22,7 @@ E8086_ARC := src/cpu/e8086/e8086.a src/cpu/e8080/e8080.a
 # -----------------------------------------------------------------------
 # Per-test binary list
 TEST_BINS := \
+	$(rel)/test_v20_native_audit \
 	$(rel)/test_nec_8080 \
 	$(rel)/test_8080_audit \
 	$(rel)/test_nec_native \
@@ -257,7 +260,10 @@ ASM_TEST_COMS := \
 	$(ASM_DIR)/ta20.com     \
 	$(ASM_DIR)/tprot.com    \
 	$(ASM_DIR)/textmem.com  \
-	$(ASM_DIR)/tloadall.com
+	$(ASM_DIR)/tloadall.com \
+	$(ASM_DIR)/tataccept.com \
+	$(ASM_DIR)/tfloppysoak.com \
+	$(ASM_DIR)/tpmsoak.com
 
 CLN += $(ASM_TEST_COMS)
 DIST += \
@@ -280,7 +286,7 @@ check-asm-build: $(ASM_TEST_COMS)
 
 # -----------------------------------------------------------------------
 # Pre-built test floppy images (one per test, fixed path, built once).
-EMU_BIN   := src/arch/ibmpc/pce-ibmpc
+EMU_BIN   ?= $(TEST_EMULATOR)
 EMU_CFG   := tests/test.cfg
 IMG_T186    := images/t186.img
 IMG_T286    := images/t286.img
@@ -299,82 +305,14 @@ check-images: $(ASM_TEST_COMS)
 	$(QR)sh tests/build_images.sh
 
 # -----------------------------------------------------------------------
-# Helper: run one emulator test against a fixed image.
-# Usage: $(call run_emu, label, cpu, image)
-define run_emu
-	$(QR)if test -x "$(EMU_BIN)" && test -f "$(3)" ; then \
-		printf "  TEST   %-30s cpu=%-8s ... " "$(3)" "$(2)" ; \
-		"$(EMU_BIN)" -R -c "$(EMU_CFG)" -p "$(2)" \
-			-I "disk {" -I "drive = 0" \
-			-I "type = \"auto\"" \
-			-I "file = \"$(3)\"" \
-			-I "}" \
-			>/dev/null 2>&1 \
-		&& printf "PASS\n" \
-		|| { printf "FAIL\n" ; e2e_fail=1 ; } ; \
-	else \
-		echo "  SKIP   $(3) (not found — run make check-images first)" ; \
-	fi
-endef
-
+# CPU guest images use null display/audio, bounded runs and retained logs.
+E2E_TIMEOUT ?= 30
+E2E_TEST_DIR ?= tests/memory-validation/e2e
 .PHONY: check-e2e
-check-e2e: $(EMU_CFG)
-	$(QP)echo "  RUN    end-to-end CPU tests"
-	$(QR)e2e_fail=0 ; \
-	for cpu in 80186 80188 v20 v30 80286 ; do \
-		if test -x "$(EMU_BIN)" && test -f "$(IMG_T186)" ; then \
-			printf "  TEST   %-30s cpu=%-8s ... " "$(IMG_T186)" "$$cpu" ; \
-			"$(EMU_BIN)" -R -c "$(EMU_CFG)" -p "$$cpu" \
-				-I "disk {" -I "drive = 0" \
-				-I "type = \"auto\"" \
-				-I "file = \"$(IMG_T186)\"" \
-				-I "}" \
-				>/dev/null 2>&1 \
-			&& printf "PASS\n" || { printf "FAIL\n" ; e2e_fail=1 ; } ; \
-		else \
-			echo "  SKIP   $(IMG_T186) (run make check-images first)" ; \
-		fi ; \
-	done ; \
-	for cpu in v20 v30 ; do \
-		if test -x "$(EMU_BIN)" && test -f "$(IMG_TV20)" ; then \
-			printf "  TEST   %-30s cpu=%-8s ... " "$(IMG_TV20)" "$$cpu" ; \
-			"$(EMU_BIN)" -R -c "$(EMU_CFG)" -p "$$cpu" \
-				-I "disk {" -I "drive = 0" \
-				-I "type = \"auto\"" \
-				-I "file = \"$(IMG_TV20)\"" \
-				-I "}" \
-				>/dev/null 2>&1 \
-			&& printf "PASS\n" || { printf "FAIL\n" ; e2e_fail=1 ; } ; \
-		else \
-			echo "  SKIP   $(IMG_TV20) (run make check-images first)" ; \
-		fi ; \
-	done ; \
-	for cpu in 80286 ; do \
-		for img in "$(IMG_T286)" "$(IMG_TA20)" "$(IMG_TPROT)" "$(IMG_TEXTMEM)" "$(IMG_TLOADALL)" ; do \
-			if test -x "$(EMU_BIN)" && test -f "$$img" ; then \
-				printf "  TEST   %-30s cpu=%-8s ... " "$$img" "$$cpu" ; \
-				"$(EMU_BIN)" -R -c "$(EMU_CFG)" -p "$$cpu" \
-					-I "disk {" -I "drive = 0" \
-					-I "type = \"auto\"" \
-					-I "file = \"$$img\"" \
-					-I "}" \
-					>/dev/null 2>&1 \
-				&& printf "PASS\n" || { printf "FAIL\n" ; e2e_fail=1 ; } ; \
-			else \
-				echo "  SKIP   $$img (run make check-images first)" ; \
-			fi ; \
-		done ; \
-	done ; \
-	if test $$e2e_fail -ne 0 ; then \
-		echo "SOME END-TO-END TESTS FAILED." ; \
-		exit 1 ; \
-	fi ; \
-	echo "All end-to-end tests passed (or skipped)."
+check-e2e: $(EMU_CFG) $(EMU_BIN)
+	$(QR)python3 tests/run_e2e.py --emulator "$(EMU_BIN)" --config "$(EMU_CFG)" \
+		--timeout "$(E2E_TIMEOUT)" --output "$(E2E_TEST_DIR)"
 
-# Wire both C-unit and e2e into 'make check'
-# 'make check' — C unit tests + end-to-end (full suite)
-.PHONY: check
-check: check-unit check-e2e
 
 else
 
@@ -386,6 +324,10 @@ check-e2e:
 	@echo "  SKIP   NASM not available; end-to-end tests skipped"
 
 endif
+
+# Normal checks include native AT smoke tests; long soaks are explicit targets.
+.PHONY: check
+check: check-unit check-e2e check-exit check-at-native
 
 # Exercise the actual machine through its public constructor and I/O bus.
 # Rename the application entry point so main.c supplies the existing globals;
@@ -411,7 +353,7 @@ tests/test_ibmpc_memory: tests/test_ibmpc_memory.o tests/test_at_io_audit_main.o
 	$(LD) $(PCE_IBMPC_LDFLAGS) -o $@ $^ $(PCE_IBMPC_LIBS) -lm
 
 # CLI cleanup regression; requires the existing Python 3 interpreter.
-EXIT_TEST_BIN ?= src/arch/ibmpc/pce-ibmpc
+EXIT_TEST_BIN ?= $(TEST_EMULATOR)
 .PHONY: check-exit
 check-exit: $(EXIT_TEST_BIN)
 	python3 tests/test_ibmpc_exit.py $(EXIT_TEST_BIN)
@@ -470,3 +412,119 @@ tests/test_nec_8080: tests/test_nec_8080.o $(E8086_ARC)
 DIST += tests/test_nec_8080.c
 
 DIST += tests/nec-8080-mode.md
+
+# Native AT tests use testroms/ and images/dos.img, never sample installations.
+AT_TEST_DIR ?= tests/memory-validation/make-at
+AT_TIMEOUT ?=
+AT_SOAK_CYCLES ?= 3
+AT_SOAK_ROUNDS ?= 64
+AT_PM_RUNS ?= 3
+AT_DISK_IMAGE ?=
+AT_TIMEOUT_OPT = $(if $(strip $(AT_TIMEOUT)),--timeout "$(AT_TIMEOUT)")
+AT_UNIT_BINS := tests/test_port92 tests/test_at_kbd tests/test_at_cmos \
+ tests/test_at_io_audit tests/test_ibmpc_memory
+
+.PHONY: check-at-build check-at-unit check-at check-at-native check-at-boot \
+ check-at-acceptance check-at-full-ram check-at-floppy-soak check-at-disk \
+ check-at-pm-soak check-all check-help
+
+check-at-build: $(AT_UNIT_BINS) $(TEST_EMULATOR) check-asm-build
+
+check-at-unit: $(AT_UNIT_BINS)
+	$(QR)result=0; for t in $(AT_UNIT_BINS); do "$$t" || result=1; done; exit $$result
+
+check-at: check-at-unit check-at-native
+check-at-native: check-at-boot check-at-acceptance
+check-at-boot: check-at-boot-ibm check-at-boot-ami
+check-at-acceptance: check-at-acceptance-ibm check-at-acceptance-ami
+check-at-full-ram: check-at-boot-full-ibm check-at-boot-full-ami \
+ check-at-acceptance-full-ibm check-at-acceptance-full-ami
+check-at-floppy-soak: check-at-floppy-ibm check-at-floppy-ami
+check-all: check check-at-full-ram check-at-floppy-soak
+ifneq "$(strip $(AT_DISK_IMAGE))" ""
+check-all: check-at-pm-soak
+endif
+
+.PHONY: check-at-boot-ibm
+check-at-boot-ibm: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite boot --bios ibm \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) --output "$(AT_TEST_DIR)/boot-ibm"
+
+.PHONY: check-at-boot-ami
+check-at-boot-ami: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite boot --bios ami \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) --output "$(AT_TEST_DIR)/boot-ami"
+
+.PHONY: check-at-boot-full-ibm
+check-at-boot-full-ibm: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite boot --bios ibm \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) --full-ram --output "$(AT_TEST_DIR)/boot-full-ibm"
+
+.PHONY: check-at-boot-full-ami
+check-at-boot-full-ami: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite boot --bios ami \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) --full-ram --output "$(AT_TEST_DIR)/boot-full-ami"
+
+.PHONY: check-at-acceptance-ibm
+check-at-acceptance-ibm: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite acceptance --bios ibm \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) --output "$(AT_TEST_DIR)/acceptance-ibm"
+
+.PHONY: check-at-acceptance-ami
+check-at-acceptance-ami: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite acceptance --bios ami \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) --output "$(AT_TEST_DIR)/acceptance-ami"
+
+.PHONY: check-at-acceptance-full-ibm
+check-at-acceptance-full-ibm: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite acceptance --bios ibm \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) --full-ram --output "$(AT_TEST_DIR)/acceptance-full-ibm"
+
+.PHONY: check-at-acceptance-full-ami
+check-at-acceptance-full-ami: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite acceptance --bios ami \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) --full-ram --output "$(AT_TEST_DIR)/acceptance-full-ami"
+
+.PHONY: check-at-floppy-ibm
+check-at-floppy-ibm: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite floppy --bios ibm \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) \
+		--cycles "$(AT_SOAK_CYCLES)" --rounds "$(AT_SOAK_ROUNDS)" \
+		--output "$(AT_TEST_DIR)/floppy-ibm"
+
+.PHONY: check-at-floppy-ami
+check-at-floppy-ami: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite floppy --bios ami \
+		--emulator "$(TEST_EMULATOR)" $(AT_TIMEOUT_OPT) \
+		--cycles "$(AT_SOAK_CYCLES)" --rounds "$(AT_SOAK_ROUNDS)" \
+		--output "$(AT_TEST_DIR)/floppy-ami"
+
+# Optional native HDD media is supplied explicitly, with no sample default.
+check-at-disk: $(TEST_EMULATOR)
+	$(QR)python3 tests/run_at_tests.py --suite disk --emulator "$(TEST_EMULATOR)" \
+		--disk "$(AT_DISK_IMAGE)" $(AT_TIMEOUT_OPT) --output "$(AT_TEST_DIR)/disk"
+
+check-at-pm-soak: check-at-disk
+	$(QR)python3 tests/run_at_tests.py --suite pm --emulator "$(TEST_EMULATOR)" \
+		--fixture "$(AT_TEST_DIR)/disk" --runs "$(AT_PM_RUNS)" $(AT_TIMEOUT_OPT) \
+		--output "$(AT_TEST_DIR)/pm-soak"
+
+check-help:
+	@printf '%s\n' \
+	 'check-build / check-at-build: compile tests without running them' \
+	 'check-unit / check-at-unit: ROM-free C tests' \
+	 'check-cpu-regression: cross-CPU gate' \
+	 'check: C, CPU guest images, CLI exit and native IBM/AMI AT smoke tests' \
+	 'check-at: AT component and native smoke tests' \
+	 'check-at-boot[-ibm|-ami]: native POST and DOS boot' \
+	 'check-at-acceptance[-ibm|-ami]: native keys, floppy writes/readback, reboot' \
+	 'check-at-full-ram: boot and acceptance with 15232K extended RAM (long)' \
+	 'check-at-floppy-soak: repeated native floppy writes/readback and reboots (long)' \
+	 'check-at-disk AT_DISK_IMAGE=/path: disposable native WD1003 disk acceptance' \
+	 'check-at-pm-soak AT_DISK_IMAGE=/path: prepare HDD fixture and run CPL0 PM soak' \
+	 'check-all: check plus full-RAM/floppy soaks; adds disk/PM when AT_DISK_IMAGE is set' \
+	 'Overrides: TEST_EMULATOR, AT_TEST_DIR, AT_TIMEOUT, AT_SOAK_CYCLES, AT_SOAK_ROUNDS, AT_PM_RUNS'
+
+DIST += $(addsuffix .c,$(TEST_BINS)) tests/guest_runner.py tests/run_e2e.py \
+ tests/run_at_tests.py tests/test.cfg tests/at-5170.cfg tests/at-5170-ami.cfg \
+ tests/asm/tataccept.asm tests/asm/tfloppysoak.asm tests/asm/tpmsoak.asm

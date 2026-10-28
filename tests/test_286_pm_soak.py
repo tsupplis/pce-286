@@ -19,6 +19,7 @@ def main():
     p.add_argument('--fixture', required=True, type=Path)
     p.add_argument('--output', type=Path, default=ROOT / 'tests/memory-validation/pm-soak')
     p.add_argument('--runs', type=int, default=3)
+    p.add_argument('--timeout', type=int, default=60, help='Seconds per guest boot')
     a = p.parse_args()
     out, fixture = a.output.resolve(), a.fixture.resolve()
     if out == fixture or not 1 <= a.runs <= 10:
@@ -42,7 +43,7 @@ def main():
         with log.open('w') as f:
             result = subprocess.run([str(a.emulator.resolve()), '-c', 'native.cfg', '-g', 'vga', '-t', 'null'],
                                     cwd=out, input='gb\ns cpu\nd 8000:0 400\nq\n', text=True,
-                                    stdout=f, stderr=subprocess.STDOUT, timeout=60,
+                                    stdout=f, stderr=subprocess.STDOUT, timeout=a.timeout,
                                     env=dict(os.environ, ASAN_OPTIONS='detect_leaks=0', UBSAN_OPTIONS='halt_on_error=1'))
         text = log.read_text()
         assert result.returncode == 0, f'process failed: {log}'

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native AMI/WD1003 DOS acceptance using a disposable copy of the user's disk.
+"""Native AMI/WD1003 DOS acceptance using a disposable copy of a supplied disk.
 
 Requires the supplied IBM DOS FAT16 disk, AMI 12/15/89 BIOS, VGA ROM, nasm
 and mtools. No PCEX ROM or BIOS disk hooks are used. Original media is untouched.
@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--emulator', required=True, type=Path)
-    parser.add_argument('--disk', type=Path, default=ROOT / 'ibmxt-dos-5.0/hd0-ibmxt.img')
+    parser.add_argument('--disk', type=Path, required=True, help='Standalone bootable DOS FAT16 image; a disposable copy is tested')
     parser.add_argument('--bios', required=True, type=Path)
     parser.add_argument('--vga-rom', required=True, type=Path)
     parser.add_argument('--output', type=Path, default=ROOT / 'tests/memory-validation/native-wd')
