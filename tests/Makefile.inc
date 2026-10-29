@@ -579,18 +579,18 @@ check-npx-unit: check-npx-execute
 check-npx-execute: tests/test_npx_execute
 	./tests/test_npx_execute
 check-build: tests/test_npx_execute
-tests/test_npx_execute: tests/test_npx_execute.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.c src/cpu/e8087/real80.h src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR)
-	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_execute.c src/cpu/e8087/execute.c src/cpu/e8087/e8087.c src/cpu/e8087/real80.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC)
+tests/test_npx_execute: tests/test_npx_execute.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.c src/cpu/e8087/real80.h src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR)
+	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_execute.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/e8087.c src/cpu/e8087/real80.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC)
 CLN += tests/test_npx_execute
-DIST += tests/test_npx_execute.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h
+DIST += tests/test_npx_execute.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h
 
 .PHONY: check-npx-memory
 check-npx-unit: check-npx-memory
 check-npx-memory: tests/test_npx_memory
 	./tests/test_npx_memory
 check-build: tests/test_npx_memory
-tests/test_npx_memory: tests/test_npx_memory.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.c src/cpu/e8087/real80.h src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR) $(E8086_ARC) $(E8086_HDR)
-	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_memory.c src/cpu/e8087/execute.c src/cpu/e8087/e8087.c src/cpu/e8087/real80.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC) $(E8086_ARC)
+tests/test_npx_memory: tests/test_npx_memory.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.c src/cpu/e8087/real80.h src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR) $(E8086_ARC) $(E8086_HDR)
+	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_memory.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/e8087.c src/cpu/e8087/real80.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC) $(E8086_ARC)
 CLN += tests/test_npx_memory
 DIST += tests/test_npx_memory.c
 
@@ -604,3 +604,33 @@ tests/npxovf.com: $(srcdir)/tests/asm/npxovf.asm
 	$(NASM) -f bin $< -o $@
 CLN += tests/npxovf.com
 DIST += tests/asm/npxovf.asm tests/decode_npx_overflow.py tests/npx-overflow-probe.md
+
+.PHONY: check-npx-convert
+check-npx-unit: check-npx-convert
+check-npx-convert: tests/test_npx_convert
+	./tests/test_npx_convert
+check-build: tests/test_npx_convert
+tests/test_npx_convert: tests/test_npx_convert.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.c src/cpu/e8087/real80.h src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR)
+	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_convert.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/e8087.c src/cpu/e8087/real80.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC)
+CLN += tests/test_npx_convert
+DIST += tests/test_npx_convert.c
+tests/test_npx_convert: $(E8086_HDR)
+
+DIST += src/cpu/e8087/transcendental.h
+
+.PHONY: check-npx-trans
+check-npx-unit: check-npx-trans
+check-npx-trans: tests/test_npx_trans
+	./tests/test_npx_trans
+check-build: tests/test_npx_trans
+tests/test_npx_trans: tests/test_npx_trans.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.c src/cpu/e8087/real80.h src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR)
+	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_trans.c src/cpu/e8087/transcendental.c src/cpu/e8087/execute.c src/cpu/e8087/e8087.c src/cpu/e8087/real80.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC)
+CLN += tests/test_npx_trans
+DIST += tests/test_npx_trans.c
+tests/test_npx_trans: $(E8086_HDR)
+
+tests/test_npx_trans: tests/npx_trans_vectors.h
+DIST += tests/npx_trans_vectors.h
+
+DIST += tests/generate_npx_trans_vectors.py
+tests/test_npx_execute tests/test_npx_convert tests/test_npx_memory tests/test_npx_trans: src/cpu/e8087/transcendental.h

@@ -24,4 +24,12 @@ int e87_mul80(e87_real80_t a, e87_real80_t b, unsigned precision,
              unsigned rounding, e87_real80_t *result, unsigned *flags);
 int e87_div80(e87_real80_t a, e87_real80_t b, unsigned precision,
              unsigned rounding, e87_real80_t *result, unsigned *flags);
+/* Finite early-model product/quotient, including retained unnormal scale.
+ * Caller handles NaN/infinity, zero divisor and invalid unnormal divisor.
+ * Flags are NPX status bits; unsupported historical range cases return zero. */
+int e87_product80(e87_real80_t a,e87_real80_t b,int divide,unsigned precision,
+                  unsigned rounding,unsigned control,e87_real80_t *result,unsigned *flags);
+/* Finite square root and exact exponent scaling; flags are NPX status bits. */
+int e87_sqrt80(e87_real80_t,unsigned,unsigned,e87_real80_t *,unsigned *);
+int e87_scale80(e87_real80_t,int,unsigned,unsigned,e87_real80_t *,unsigned *);
 #endif

@@ -46,6 +46,119 @@ static void protected_setup(e8086_t *c)
     }
     c->msw|=1;
 }
+static void guest_comparisons_conversions(void)
+{
+    /* Every new memory encoding, with complete access, first-word fault and
+     * later-transfer overrun. Two-byte operands have no later-word case. */
+    static const struct {unsigned op,mr,size,write;} forms[]={
+      {0xd8,0x10,4,0},{0xd8,0x18,4,0},{0xdc,0x10,8,0},{0xdc,0x18,8,0},
+      {0xda,0x10,4,0},{0xda,0x18,4,0},{0xde,0x10,2,0},{0xde,0x18,2,0},
+      {0xd9,0,4,0},{0xd9,0x10,4,1},{0xd9,0x18,4,1},
+      {0xdd,0,8,0},{0xdd,0x10,8,1},{0xdd,0x18,8,1},
+      {0xdb,0,4,0},{0xdb,0x10,4,1},{0xdb,0x18,4,1},
+      {0xdf,0,2,0},{0xdf,0x10,2,1},{0xdf,0x18,2,1},
+      {0xdf,0x28,8,0},{0xdf,0x38,8,1},{0xdf,0x20,10,0},{0xdf,0x30,10,1}};
+    for(unsigned m=0;m<2;++m)for(unsigned k=0;k<sizeof(forms)/sizeof(forms[0]);++k)
+    for(unsigned edge=0;edge<(m?(forms[k].size>2?3:2):1);++edge){
+        e8086_t *c=cpu(m);e87_t n,before,expected;e87_init(&n,m);n.tags=0xfffc;
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x4000};
+        unsigned char bytes[10]={0},want[10]={0};
+        if(k<4 || (k>=8 && k<14))bytes[forms[k].size-1]=0x40;else bytes[0]=2;
+        memcpy(ram+0x600,bytes,10);ram[0x5ff]=ram[0x60a]=0xa5;
+        if(m){protected_setup(c);c->seg_limit[E86_REG_DS]=edge==0?0x600+forms[k].size-1:edge==1?0x600:0x600+forms[k].size-2;}
+        e86_set_bx(c,0x600);e86_set_npx_control(c,&n,e87_cpu_control);
+        e86_set_npx_memory(c,e87_cpu_memory);e86_set_npx_event(c,e87_cpu_event);e86_set_npx_address(c,e87_cpu_address);
+        before=n;expected=n;
+        CHECK(e87_numeric(&expected,forms[k].op,forms[k].mr,forms[k].write?0:bytes,forms[k].write?want:0));
+        operand_writes=0;step(c,forms[k].op,forms[k].mr|7);
+        CHECK(!(c->state&E86_STATE_NPX_STOP));
+        if(!edge){
+            CHECK(c->ip==0x102 && n.status==expected.status && n.tags==expected.tags);
+            for(unsigned j=0;j<8;++j)CHECK(n.reg[j].significand==expected.reg[j].significand&&n.reg[j].sign_exponent==expected.reg[j].sign_exponent);
+            CHECK(!memcmp(ram+0x600,forms[k].write?want:bytes,forms[k].size));
+            CHECK(operand_writes==(forms[k].write?forms[k].size:0));
+            CHECK(n.instruction_pointer==0x100 && n.operand_pointer==0x600);
+            CHECK(n.opcode==(((forms[k].op&7)<<8)|forms[k].mr|7));
+        }else{
+            CHECK(c->ip==0x500 && n.status==before.status && n.tags==before.tags);
+            CHECK(!memcmp(n.reg,before.reg,sizeof n.reg) && !memcmp(ram+0x600,bytes,10));
+            CHECK(!operand_writes && !n.instruction_pointer && !n.operand_pointer);
+            CHECK(n.transfer_blocked==(edge==2));
+        }
+        CHECK(ram[0x5ff]==0xa5 && ram[0x60a]==0xa5);e86_del(c);
+    }
+    /* Actual CPU suppression of invalid, overflow and underflow stores. */
+    for(unsigned m=0;m<2;++m)for(unsigned which=0;which<3;++which){
+        e8086_t *c=cpu(m);e87_t n;e87_init(&n,m);n.tags=0xfffc;
+        unsigned exception=which==0?1:which==1?8:0x10;
+        n.control&=~exception;n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),which==0?0x401f:which==1?0x407f:0x3f80};
+        e86_set_bx(c,0x600);e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_memory(c,e87_cpu_memory);
+        e86_set_npx_event(c,e87_cpu_event);memset(ram+0x600,0xa5,10);operand_writes=0;
+        step(c,which==0?0xdb:0xd9,0x1f);
+        CHECK(c->ip==0x102 && !operand_writes && e87_top(&n)==0 && n.tags==0xfffc);
+        CHECK((n.status&0xbf)==(0x80|exception));for(unsigned j=0;j<10;++j)CHECK(ram[0x600+j]==0xa5);
+        e86_del(c);
+    }
+    const unsigned ops[]={0xd8,0xd8,0xde,0xd9,0xd9,0xd9,0xd9,0xdd,0xdd};
+    const unsigned mrs[]={0xd1,0xd9,0xd9,0xe4,0xe5,0xc0,0xc9,0xd1,0xd9};
+    for(unsigned m=0;m<2;++m)for(unsigned k=0;k<9;++k){
+        e8086_t *c=cpu(m);e87_t n;e87_init(&n,m);n.tags=0xfff0;
+        n.reg[0]=n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff};
+        e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_address(c,e87_cpu_address);
+        step(c,ops[k],mrs[k]);CHECK(c->ip==0x102 && !(c->state&E86_STATE_NPX_STOP));
+        CHECK(n.opcode==(((ops[k]&7)<<8)|mrs[k]) && n.instruction_pointer==0x100);e86_del(c);
+    }
+}
+static void guest_memory_arithmetic(void)
+{
+    const unsigned ops[]={0xd8,0xdc,0xda,0xde},sizes[]={4,8,4,2},groups[]={0,1,4,5,6,7};
+    for(unsigned model=0;model<2;++model) for(unsigned f=0;f<4;++f)
+    for(unsigned g=0;g<6;++g) for(unsigned edge=0;edge<(model?3:1);++edge) {
+        e8086_t *c=cpu(model);e87_t n,before;e87_init(&n,model);n.tags=0xfffc;
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x4002};
+        uint64_t raw=f==0?0x40000000:f==1?UINT64_C(0x4000000000000000):2;
+        for(unsigned j=0;j<sizes[f];++j)ram[0x600+j]=raw>>(8*j);
+        if(model) {protected_setup(c);c->seg_limit[E86_REG_DS]=edge==0?0x600+sizes[f]-1:edge==1?0x600:0x600+sizes[f]-2;}
+        e86_set_bx(c,0x600);e86_set_npx_control(c,&n,e87_cpu_control);
+        e86_set_npx_memory(c,e87_cpu_memory);e86_set_npx_event(c,e87_cpu_event);e86_set_npx_address(c,e87_cpu_address);
+        before=n;operand_writes=0;step(c,ops[f],(groups[g]<<3)|7);
+        CHECK(!(c->state&E86_STATE_NPX_STOP) && operand_writes==0);
+        if(!edge) {
+            CHECK(c->ip==0x102 && n.instruction_pointer==0x100 && n.operand_pointer==0x600);
+            CHECK(n.opcode==(((ops[f]&7)<<8)|(groups[g]<<3)|7));
+            CHECK(n.reg[0].significand && e87_top(&n)==0 && n.tags==0xfffc);
+        } else {
+            CHECK(c->ip==0x500 && n.status==before.status && n.tags==before.tags);
+            CHECK(n.reg[0].significand==before.reg[0].significand && n.reg[0].sign_exponent==before.reg[0].sign_exponent);
+            CHECK(n.instruction_pointer==before.instruction_pointer && n.operand_pointer==before.operand_pointer);
+            CHECK(n.transfer_blocked==(edge==2 && sizes[f]>2));
+        }
+        e86_del(c);
+    }
+    const unsigned unary[]={0xe0,0xe1,0xf4,0xfa,0xfc,0xfd,0xf8};
+    for(unsigned model=0;model<2;++model)for(unsigned k=0;k<7;++k) {
+        e8086_t *c=cpu(model);e87_t n;e87_init(&n,model);n.tags=0xfff0;
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x4001};n.reg[1]=n.reg[0];
+        e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_address(c,e87_cpu_address);
+        step(c,0xd9,unary[k]);CHECK(c->ip==0x102 && !(c->state&E86_STATE_NPX_STOP));
+        CHECK(n.opcode==(0x100|unary[k]) && n.instruction_pointer==0x100);e86_del(c);
+    }
+}
+static void guest_product(void)
+{
+    const unsigned ops[]={0xd8,0xdc,0xde}, groups[]={0xc9,0xf1,0xf9};
+    for(unsigned model=0;model<2;++model) for(unsigned f=0;f<3;++f) for(unsigned k=0;k<3;++k) {
+        e8086_t *c=cpu(model);e87_t n;e87_init(&n,model);n.tags=0xfff0;
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x4001};
+        n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x4000};
+        e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_address(c,e87_cpu_address);
+        step(c,ops[f],groups[k]);
+        CHECK(c->ip==0x102 && !(c->state&E86_STATE_NPX_STOP));
+        CHECK(n.reg[f?1:0].sign_exponent==(k==0?0x4002:k==1?0x4000:0x3ffe));
+        CHECK(e87_top(&n)==(f==2) && n.opcode==(((ops[f]&7)<<8)|groups[k]));
+        e86_del(c);
+    }
+}
 static void guest_subtraction(void)
 {
     const unsigned ops[]={0xd8,0xdc,0xde};
@@ -271,8 +384,25 @@ static void pending_287(void)
         e86_del(c);
     }
 }
+static void guest_constants_transcendentals(void)
+{
+ const unsigned forms[]={0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xf0,0xf1,0xf3,0xf9};
+ for(unsigned m=0;m<2;++m)for(unsigned k=0;k<11;++k){
+  e8086_t *c=cpu(m);e87_t n;e87_init(&n,m);n.tags=0xfff0;
+  n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3ffd};
+  n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3ffc};n.operand_pointer=0x12345;
+  e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_address(c,e87_cpu_address);
+  step(c,0xd9,forms[k]);CHECK(c->ip==0x102 && !(c->state&E86_STATE_NPX_STOP));
+  CHECK(n.opcode==(0x100|forms[k])&&n.instruction_pointer==0x100);
+  CHECK(n.operand_pointer==0x12345);CHECK(e87_top(&n)==(k<7?7:k==7?0:1));e86_del(c);
+ }
+}
 int main(void)
 {
+    guest_constants_transcendentals();
+    guest_product();
+    guest_memory_arithmetic();
+    guest_comparisons_conversions();
     guest_subtraction();
     guest_nop();
     guest_environment();

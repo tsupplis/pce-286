@@ -13,6 +13,524 @@ static void rejected(e87_t *n, unsigned op, unsigned mr, unsigned char *in)
     CHECK(!memcmp(n, &before, sizeof(*n)));
     CHECK(!memcmp(out, sentinel, 10));
 }
+static e87_real80_t whole(int value)
+{
+    unsigned sign=value<0,exponent=0;uint64_t v=sign?-(int64_t)value:value,copy=v;
+    if(!v) return (e87_real80_t){0,0};
+    while(copy>>1) {copy>>=1;++exponent;}
+    return (e87_real80_t){v<<(63-exponent),(sign<<15)|(0x3fff+exponent)};
+}
+static void same_value(e87_real80_t a,e87_real80_t b)
+{ CHECK(a.significand==b.significand && a.sign_exponent==b.sign_exponent); }
+static void memory_arithmetic_checks(void)
+{
+    const unsigned ops[]={0xd8,0xdc,0xda,0xde},groups[]={0,1,4,5,6,7};
+    const unsigned sizes[]={4,8,4,2};
+    for(unsigned m=0;m<2;++m) for(unsigned f=0;f<4;++f) for(unsigned g=0;g<6;++g)
+    for(unsigned neg=0;neg<2;++neg) for(unsigned t=0;t<8;++t) {
+        e87_t n;e87_init(&n,m);n.status=t<<11;n.tags=0xffff&~(3u<<(2*t));n.reg[t]=whole(8);
+        uint64_t raw=f==0?0x40000000:f==1?UINT64_C(0x4000000000000000):2;
+        if(neg) raw=f<2?raw|(UINT64_C(1)<<(sizes[f]*8-1)):((UINT64_C(1)<<(sizes[f]*8))-2);
+        unsigned char b[8];for(unsigned k=0;k<sizes[f];++k)b[k]=raw>>(8*k);
+        e87_t before=n;
+        CHECK(e87_cpu_memory(&n,ops[f],groups[g]<<3,1,0)==((sizes[f]<<2)|1));
+        CHECK(e87_cpu_memory(&n,ops[f],groups[g]<<3,0,b));
+        int y=neg?-2:2,result=g==0?8+y:g==1?8*y:g==2?8-y:g==3?y-8:g==4?8/y:0;
+        same_value(n.reg[t],g==5?(e87_real80_t){UINT64_C(0x8000000000000000),0x3ffd|(neg<<15)}:whole(result));
+        CHECK(n.tags==before.tags && e87_top(&n)==t && !(n.status&0x3f));
+        for(unsigned k=0;k<8;++k) if(k!=t) same_value(n.reg[k],before.reg[k]);
+    }
+    for(unsigned m=0;m<2;++m) for(unsigned f=0;f<2;++f) for(unsigned mask=0;mask<2;++mask) {
+        e87_t n;e87_init(&n,m);n.tags=0xfffc;n.reg[0]=whole(1);n.control=(n.control&~2u)|(mask?2:0);
+        unsigned char b[8]={1};e87_real80_t before=n.reg[0];
+        CHECK(e87_numeric(&n,ops[f],0x08,b,0));
+        CHECK((n.status&0x3f)==2);
+        if(mask) {CHECK(n.reg[0].significand==(UINT64_C(1)<<(f?11:40)));CHECK(n.reg[0].sign_exponent==(unsigned)(0x3fff-(f?1022:126)));}
+        else same_value(n.reg[0],before);
+    }
+    for(unsigned m=0;m<2;++m) for(unsigned f=2;f<4;++f) {
+        e87_t n;e87_init(&n,m);n.tags=0xfffc;n.reg[0]=whole(1);unsigned char b[4]={0};b[sizes[f]-1]=0x80;
+        CHECK(e87_numeric(&n,ops[f],8,b,0));
+        CHECK(n.reg[0].significand==UINT64_C(0x8000000000000000));
+        CHECK(n.reg[0].sign_exponent==(0xbfff+sizes[f]*8-1));
+    }
+}
+static void other_arithmetic_checks(void)
+{
+    for(unsigned m=0;m<2;++m) for(unsigned t=0;t<8;++t) {
+        e87_t n;e87_init(&n,m);n.tags=0xffff&~(3u<<(2*t));n.status=t<<11;n.reg[t]=whole(-8);
+        CHECK(e87_numeric(&n,0xd9,0xe1,0,0));same_value(n.reg[t],whole(8));
+        CHECK(e87_numeric(&n,0xd9,0xe0,0,0));same_value(n.reg[t],whole(-8));
+        CHECK(e87_numeric(&n,0xd9,0xf4,0,0));
+        CHECK(e87_top(&n)==((t+7)&7));same_value(n.reg[t],whole(3));same_value(n.reg[(t+7)&7],whole(-1));
+    }
+    for(unsigned m=0;m<2;++m) for(unsigned sign=0;sign<2;++sign) {
+        e87_t n;e87_init(&n,m);n.tags=0xfffd;n.reg[0]=(e87_real80_t){0,sign<<15};
+        CHECK(e87_numeric(&n,0xd9,0xf4,0,0));
+        same_value(n.reg[0],(e87_real80_t){0,sign<<15});same_value(n.reg[7],n.reg[0]);CHECK(!(n.status&0x3f));
+    }
+    for(unsigned m=0;m<2;++m) for(unsigned rc=0;rc<4;++rc) for(unsigned sign=0;sign<2;++sign)
+    for(unsigned odd=0;odd<2;++odd) for(unsigned mask=0;mask<2;++mask) {
+        e87_t n;e87_init(&n,m);n.tags=0xfffc;n.control=(n.control&~0xc20u)|(rc<<10)|(mask?0x20:0);
+        n.reg[0]=(e87_real80_t){odd?UINT64_C(0xe000000000000000):UINT64_C(0xa000000000000000),0x4000|(sign<<15)};
+        unsigned up=rc==0?odd:rc==1?sign:rc==2?!sign:0;
+        CHECK(e87_numeric(&n,0xd9,0xfc,0,0));same_value(n.reg[0],whole((sign?-1:1)*(int)(2+odd+up)));
+        CHECK((n.status&0xa0)==(mask?0x20:0xa0));CHECK(!!(n.status&0x200)==up);
+    }
+    for(unsigned m=0;m<2;++m) for(int scale=-15;scale<16;++scale) {
+        e87_t n;e87_init(&n,m);n.tags=0xfff0;n.reg[0]=whole(3);n.reg[1]=whole(scale);
+        CHECK(e87_numeric(&n,0xd9,0xfd,0,0));CHECK(n.reg[0].significand==UINT64_C(0xc000000000000000));
+        CHECK(n.reg[0].sign_exponent==0x4000+scale);same_value(n.reg[1],whole(scale));CHECK(!(n.status&0x3f));
+    }
+    for(unsigned m=0;m<2;++m) for(unsigned q=0;q<32;++q) for(unsigned sign=0;sign<2;++sign) {
+        e87_t n;e87_init(&n,m);n.tags=0xfff0;n.reg[0]=whole((sign?-1:1)*(int)(q*3+1));n.reg[1]=whole(3);n.status=0x4700;
+        CHECK(e87_numeric(&n,0xd9,0xf8,0,0));same_value(n.reg[0],whole(sign?-1:1));
+        unsigned cc=((q&1)?0x200:0)|(q<2?0x4000:(q&2)?0x4000:0)|(q<4?0x100:(q&4)?0x100:0);
+        CHECK((n.status&0x4700)==cc);CHECK(!(n.status&0x3f));
+    }
+    for(unsigned m=0;m<2;++m) {
+        e87_t n;e87_init(&n,m);n.tags=0xfff0;n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff+200};n.reg[1]=whole(3);
+        unsigned loops=0;do {CHECK(e87_numeric(&n,0xd9,0xf8,0,0));++loops;} while((n.status&0x400)&&loops<8);
+        CHECK(loops>1 && loops<8);same_value(n.reg[0],whole(1));CHECK(!(n.status&0x3f));
+        n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3ffe};rejected(&n,0xd9,0xfd,0);
+    }
+    const unsigned unary[]={0xe0,0xe1,0xf4,0xfa,0xfc},binary[]={0xf8,0xfd};
+    for(unsigned m=0;m<2;++m) for(unsigned mask=0;mask<2;++mask) for(unsigned k=0;k<7;++k) {
+        e87_t n;e87_init(&n,m);n.control=(n.control&~1u)|mask;
+        CHECK(e87_numeric(&n,0xd9,k<5?unary[k]:binary[k-5],0,0));
+        CHECK((n.status&0x81)==(mask?1:0x81));
+        if(!mask) CHECK(n.tags==0xffff && e87_top(&n)==0);
+        else CHECK(n.reg[k==2?7:0].sign_exponent==0xffff);
+    }
+}
+
+static void square_root_vectors(void)
+{
+ static const struct {uint64_t sig,out;unsigned exp,oe,pc,rc,flags;} v[]={
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb744670000000000),0x29a2,0x34d0,0x0,0,0x220},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb744660000000000),0x29a2,0x34d0,0x0,1,0x20},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb744670000000000),0x29a2,0x34d0,0x0,2,0x220},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb744660000000000),0x29a2,0x34d0,0x0,3,0x20},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb74466f333928800),0x29a2,0x34d0,0x200,0,0x220},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb74466f333928000),0x29a2,0x34d0,0x200,1,0x20},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb74466f333928800),0x29a2,0x34d0,0x200,2,0x220},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb74466f333928000),0x29a2,0x34d0,0x200,3,0x20},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb74466f333928409),0x29a2,0x34d0,0x300,0,0x20},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb74466f333928409),0x29a2,0x34d0,0x300,1,0x20},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb74466f33392840a),0x29a2,0x34d0,0x300,2,0x220},
+ {UINT64_C(0x8332dd768e5592bf),UINT64_C(0xb74466f333928409),0x29a2,0x34d0,0x300,3,0x20},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764ce0000000000),0x7af3,0x5d79,0x0,0,0x220},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cd0000000000),0x7af3,0x5d79,0x0,1,0x20},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764ce0000000000),0x7af3,0x5d79,0x0,2,0x220},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cd0000000000),0x7af3,0x5d79,0x0,3,0x20},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cdd764787800),0x7af3,0x5d79,0x200,0,0x20},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cdd764787800),0x7af3,0x5d79,0x200,1,0x20},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cdd764788000),0x7af3,0x5d79,0x200,2,0x220},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cdd764787800),0x7af3,0x5d79,0x200,3,0x20},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cdd764787b36),0x7af3,0x5d79,0x300,0,0x220},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cdd764787b35),0x7af3,0x5d79,0x300,1,0x20},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cdd764787b36),0x7af3,0x5d79,0x300,2,0x220},
+ {UINT64_C(0x8f36f1954380786c),UINT64_C(0x8764cdd764787b35),0x7af3,0x5d79,0x300,3,0x20},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cb00000000000),0x5090,0x4847,0x0,0,0x220},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77caf0000000000),0x5090,0x4847,0x0,1,0x20},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cb00000000000),0x5090,0x4847,0x0,2,0x220},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77caf0000000000),0x5090,0x4847,0x0,3,0x20},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cafeabb25a000),0x5090,0x4847,0x200,0,0x220},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cafeabb259800),0x5090,0x4847,0x200,1,0x20},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cafeabb25a000),0x5090,0x4847,0x200,2,0x220},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cafeabb259800),0x5090,0x4847,0x200,3,0x20},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cafeabb259e09),0x5090,0x4847,0x300,0,0x220},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cafeabb259e08),0x5090,0x4847,0x300,1,0x20},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cafeabb259e09),0x5090,0x4847,0x300,2,0x220},
+ {UINT64_C(0xb562ac372aa13efc),UINT64_C(0xd77cafeabb259e08),0x5090,0x4847,0x300,3,0x20},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbb0000000000),0x1e47,0x2f23,0x0,0,0x220},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dba0000000000),0x1e47,0x2f23,0x0,1,0x20},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbb0000000000),0x1e47,0x2f23,0x0,2,0x220},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dba0000000000),0x1e47,0x2f23,0x0,3,0x20},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbae821869000),0x1e47,0x2f23,0x200,0,0x220},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbae821868800),0x1e47,0x2f23,0x200,1,0x20},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbae821869000),0x1e47,0x2f23,0x200,2,0x220},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbae821868800),0x1e47,0x2f23,0x200,3,0x20},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbae821868c2e),0x1e47,0x2f23,0x300,0,0x20},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbae821868c2e),0x1e47,0x2f23,0x300,1,0x20},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbae821868c2f),0x1e47,0x2f23,0x300,2,0x220},
+ {UINT64_C(0xc1c6ea01908bd114),UINT64_C(0x9d7dbae821868c2e),0x1e47,0x2f23,0x300,3,0x20},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d340000000000),0x6b33,0x5599,0x0,0,0x20},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d340000000000),0x6b33,0x5599,0x0,1,0x20},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d350000000000),0x6b33,0x5599,0x0,2,0x220},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d340000000000),0x6b33,0x5599,0x0,3,0x20},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d342ee0273800),0x6b33,0x5599,0x200,0,0x220},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d342ee0273000),0x6b33,0x5599,0x200,1,0x20},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d342ee0273800),0x6b33,0x5599,0x200,2,0x220},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d342ee0273000),0x6b33,0x5599,0x200,3,0x20},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d342ee027346c),0x6b33,0x5599,0x300,0,0x20},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d342ee027346c),0x6b33,0x5599,0x300,1,0x20},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d342ee027346d),0x6b33,0x5599,0x300,2,0x220},
+ {UINT64_C(0x92be4511069f9b79),UINT64_C(0x890d342ee027346c),0x6b33,0x5599,0x300,3,0x20},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8b0000000000),0x2c81,0x3640,0x0,0,0x220},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8a0000000000),0x2c81,0x3640,0x0,1,0x20},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8b0000000000),0x2c81,0x3640,0x0,2,0x220},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8a0000000000),0x2c81,0x3640,0x0,3,0x20},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8ad53653a800),0x2c81,0x3640,0x200,0,0x220},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8ad53653a000),0x2c81,0x3640,0x200,1,0x20},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8ad53653a800),0x2c81,0x3640,0x200,2,0x220},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8ad53653a000),0x2c81,0x3640,0x200,3,0x20},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8ad53653a515),0x2c81,0x3640,0x300,0,0x220},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8ad53653a514),0x2c81,0x3640,0x300,1,0x20},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8ad53653a515),0x2c81,0x3640,0x300,2,0x220},
+ {UINT64_C(0xf884122cd182290d),UINT64_C(0xb25a8ad53653a514),0x2c81,0x3640,0x300,3,0x20},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa40000000000),0x3415,0x3a0a,0x0,0,0x220},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa30000000000),0x3415,0x3a0a,0x0,1,0x20},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa40000000000),0x3415,0x3a0a,0x0,2,0x220},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa30000000000),0x3415,0x3a0a,0x0,3,0x20},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa3e12f033800),0x3415,0x3a0a,0x200,0,0x20},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa3e12f033800),0x3415,0x3a0a,0x200,1,0x20},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa3e12f034000),0x3415,0x3a0a,0x200,2,0x220},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa3e12f033800),0x3415,0x3a0a,0x200,3,0x20},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa3e12f033a26),0x3415,0x3a0a,0x300,0,0x220},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa3e12f033a25),0x3415,0x3a0a,0x300,1,0x20},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa3e12f033a26),0x3415,0x3a0a,0x300,2,0x220},
+ {UINT64_C(0x97fcd16e492db054),UINT64_C(0x8b7aa3e12f033a25),0x3415,0x3a0a,0x300,3,0x20},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a8840000000000),0x064f,0x2327,0x0,0,0x220},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a8830000000000),0x064f,0x2327,0x0,1,0x20},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a8840000000000),0x064f,0x2327,0x0,2,0x220},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a8830000000000),0x064f,0x2327,0x0,3,0x20},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a883a420305000),0x064f,0x2327,0x200,0,0x220},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a883a420304800),0x064f,0x2327,0x200,1,0x20},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a883a420305000),0x064f,0x2327,0x200,2,0x220},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a883a420304800),0x064f,0x2327,0x200,3,0x20},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a883a420304ffe),0x064f,0x2327,0x300,0,0x20},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a883a420304ffe),0x064f,0x2327,0x300,1,0x20},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a883a420304fff),0x064f,0x2327,0x300,2,0x220},
+ {UINT64_C(0x8da9b179b99c6aa4),UINT64_C(0x86a883a420304ffe),0x064f,0x2327,0x300,3,0x20},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb070000000000),0x628d,0x5146,0x0,0,0x220},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb060000000000),0x628d,0x5146,0x0,1,0x20},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb070000000000),0x628d,0x5146,0x0,2,0x220},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb060000000000),0x628d,0x5146,0x0,3,0x20},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb06f74af18800),0x628d,0x5146,0x200,0,0x20},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb06f74af18800),0x628d,0x5146,0x200,1,0x20},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb06f74af19000),0x628d,0x5146,0x200,2,0x220},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb06f74af18800),0x628d,0x5146,0x200,3,0x20},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb06f74af18bd8),0x628d,0x5146,0x300,0,0x220},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb06f74af18bd7),0x628d,0x5146,0x300,1,0x20},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb06f74af18bd8),0x628d,0x5146,0x300,2,0x220},
+ {UINT64_C(0xc4fe7b3a99c7142e),UINT64_C(0x9ecb06f74af18bd7),0x628d,0x5146,0x300,3,0x20},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475e0000000000),0x5b9c,0x4dcd,0x0,0,0x220},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475d0000000000),0x5b9c,0x4dcd,0x0,1,0x20},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475e0000000000),0x5b9c,0x4dcd,0x0,2,0x220},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475d0000000000),0x5b9c,0x4dcd,0x0,3,0x20},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475daee5cb8000),0x5b9c,0x4dcd,0x200,0,0x20},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475daee5cb8000),0x5b9c,0x4dcd,0x200,1,0x20},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475daee5cb8800),0x5b9c,0x4dcd,0x200,2,0x220},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475daee5cb8000),0x5b9c,0x4dcd,0x200,3,0x20},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475daee5cb8337),0x5b9c,0x4dcd,0x300,0,0x20},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475daee5cb8337),0x5b9c,0x4dcd,0x300,1,0x20},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475daee5cb8338),0x5b9c,0x4dcd,0x300,2,0x220},
+ {UINT64_C(0xf2bbe8235451e697),UINT64_C(0xf9475daee5cb8337),0x5b9c,0x4dcd,0x300,3,0x20},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c75730000000000),0x5e71,0x4f38,0x0,0,0x220},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c75720000000000),0x5e71,0x4f38,0x0,1,0x20},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c75730000000000),0x5e71,0x4f38,0x0,2,0x220},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c75720000000000),0x5e71,0x4f38,0x0,3,0x20},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c7572a81e103800),0x5e71,0x4f38,0x200,0,0x20},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c7572a81e103800),0x5e71,0x4f38,0x200,1,0x20},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c7572a81e104000),0x5e71,0x4f38,0x200,2,0x220},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c7572a81e103800),0x5e71,0x4f38,0x200,3,0x20},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c7572a81e103924),0x5e71,0x4f38,0x300,0,0x220},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c7572a81e103923),0x5e71,0x4f38,0x300,1,0x20},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c7572a81e103924),0x5e71,0x4f38,0x300,2,0x220},
+ {UINT64_C(0xbf3eb33dcb52d34c),UINT64_C(0x9c7572a81e103923),0x5e71,0x4f38,0x300,3,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f0000000000),0x1939,0x2c9c,0x0,0,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f0000000000),0x1939,0x2c9c,0x0,1,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa506400000000000),0x1939,0x2c9c,0x0,2,0x220},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f0000000000),0x1939,0x2c9c,0x0,3,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f35954ce000),0x1939,0x2c9c,0x200,0,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f35954ce000),0x1939,0x2c9c,0x200,1,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f35954ce800),0x1939,0x2c9c,0x200,2,0x220},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f35954ce000),0x1939,0x2c9c,0x200,3,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f35954ce2a0),0x1939,0x2c9c,0x300,0,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f35954ce2a0),0x1939,0x2c9c,0x300,1,0x20},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f35954ce2a1),0x1939,0x2c9c,0x300,2,0x220},
+ {UINT64_C(0xd4c21b4431270ce0),UINT64_C(0xa5063f35954ce2a0),0x1939,0x2c9c,0x300,3,0x20},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f680000000000),0x3250,0x3927,0x0,0,0x20},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f680000000000),0x3250,0x3927,0x0,1,0x20},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f690000000000),0x3250,0x3927,0x0,2,0x220},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f680000000000),0x3250,0x3927,0x0,3,0x20},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f682f232be800),0x3250,0x3927,0x200,0,0x20},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f682f232be800),0x3250,0x3927,0x200,1,0x20},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f682f232bf000),0x3250,0x3927,0x200,2,0x220},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f682f232be800),0x3250,0x3927,0x200,3,0x20},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f682f232beb72),0x3250,0x3927,0x300,0,0x220},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f682f232beb71),0x3250,0x3927,0x300,1,0x20},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f682f232beb72),0x3250,0x3927,0x300,2,0x220},
+ {UINT64_C(0xd6002b638c38bed3),UINT64_C(0xea0f682f232beb71),0x3250,0x3927,0x300,3,0x20},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b90000000000),0x67a9,0x53d4,0x0,0,0x20},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b90000000000),0x67a9,0x53d4,0x0,1,0x20},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1ba0000000000),0x67a9,0x53d4,0x0,2,0x220},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b90000000000),0x67a9,0x53d4,0x0,3,0x20},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b92058aa3000),0x67a9,0x53d4,0x200,0,0x20},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b92058aa3000),0x67a9,0x53d4,0x200,1,0x20},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b92058aa3800),0x67a9,0x53d4,0x200,2,0x220},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b92058aa3000),0x67a9,0x53d4,0x200,3,0x20},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b92058aa32fd),0x67a9,0x53d4,0x300,0,0x220},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b92058aa32fc),0x67a9,0x53d4,0x300,1,0x20},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b92058aa32fd),0x67a9,0x53d4,0x300,2,0x220},
+ {UINT64_C(0xfa2a135e2026c730),UINT64_C(0xb2f1b92058aa32fc),0x67a9,0x53d4,0x300,3,0x20},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc7450000000000),0x59d6,0x4cea,0x0,0,0x220},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc7440000000000),0x59d6,0x4cea,0x0,1,0x20},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc7450000000000),0x59d6,0x4cea,0x0,2,0x220},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc7440000000000),0x59d6,0x4cea,0x0,3,0x20},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc744d833f58800),0x59d6,0x4cea,0x200,0,0x20},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc744d833f58800),0x59d6,0x4cea,0x200,1,0x20},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc744d833f59000),0x59d6,0x4cea,0x200,2,0x220},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc744d833f58800),0x59d6,0x4cea,0x200,3,0x20},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc744d833f5898e),0x59d6,0x4cea,0x300,0,0x20},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc744d833f5898e),0x59d6,0x4cea,0x300,1,0x20},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc744d833f5898f),0x59d6,0x4cea,0x300,2,0x220},
+ {UINT64_C(0xc39cc50cc52a1f94),UINT64_C(0xdfc744d833f5898e),0x59d6,0x4cea,0x300,3,0x20},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fb0000000000),0x252c,0x3295,0x0,0,0x220},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fa0000000000),0x252c,0x3295,0x0,1,0x20},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fb0000000000),0x252c,0x3295,0x0,2,0x220},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fa0000000000),0x252c,0x3295,0x0,3,0x20},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fadf5aad4000),0x252c,0x3295,0x200,0,0x220},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fadf5aad3800),0x252c,0x3295,0x200,1,0x20},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fadf5aad4000),0x252c,0x3295,0x200,2,0x220},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fadf5aad3800),0x252c,0x3295,0x200,3,0x20},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fadf5aad3f9e),0x252c,0x3295,0x300,0,0x220},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fadf5aad3f9d),0x252c,0x3295,0x300,1,0x20},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fadf5aad3f9e),0x252c,0x3295,0x300,2,0x220},
+ {UINT64_C(0xd142834a7029206f),UINT64_C(0xe773fadf5aad3f9d),0x252c,0x3295,0x300,3,0x20},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684c0000000000),0x3df4,0x3ef9,0x0,0,0x220},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b0000000000),0x3df4,0x3ef9,0x0,1,0x20},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684c0000000000),0x3df4,0x3ef9,0x0,2,0x220},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b0000000000),0x3df4,0x3ef9,0x0,3,0x20},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b8d731da800),0x3df4,0x3ef9,0x200,0,0x20},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b8d731da800),0x3df4,0x3ef9,0x200,1,0x20},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b8d731db000),0x3df4,0x3ef9,0x200,2,0x220},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b8d731da800),0x3df4,0x3ef9,0x200,3,0x20},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b8d731da833),0x3df4,0x3ef9,0x300,0,0x220},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b8d731da832),0x3df4,0x3ef9,0x300,1,0x20},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b8d731da833),0x3df4,0x3ef9,0x300,2,0x220},
+ {UINT64_C(0xc1390d86cce1276c),UINT64_C(0xde684b8d731da832),0x3df4,0x3ef9,0x300,3,0x20},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e0580000000000),0x68f6,0x547a,0x0,0,0x220},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e0570000000000),0x68f6,0x547a,0x0,1,0x20},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e0580000000000),0x68f6,0x547a,0x0,2,0x220},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e0570000000000),0x68f6,0x547a,0x0,3,0x20},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e057963d955800),0x68f6,0x547a,0x200,0,0x220},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e057963d955000),0x68f6,0x547a,0x200,1,0x20},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e057963d955800),0x68f6,0x547a,0x200,2,0x220},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e057963d955000),0x68f6,0x547a,0x200,3,0x20},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e057963d9557e4),0x68f6,0x547a,0x300,0,0x220},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e057963d9557e3),0x68f6,0x547a,0x300,1,0x20},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e057963d9557e4),0x68f6,0x547a,0x300,2,0x220},
+ {UINT64_C(0x9458c9591a399497),UINT64_C(0xc2e057963d9557e3),0x68f6,0x547a,0x300,3,0x20},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d740000000000),0x4641,0x4320,0x0,0,0x20},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d740000000000),0x4641,0x4320,0x0,1,0x20},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d750000000000),0x4641,0x4320,0x0,2,0x220},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d740000000000),0x4641,0x4320,0x0,3,0x20},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d7461b5e85000),0x4641,0x4320,0x200,0,0x20},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d7461b5e85000),0x4641,0x4320,0x200,1,0x20},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d7461b5e85800),0x4641,0x4320,0x200,2,0x220},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d7461b5e85000),0x4641,0x4320,0x200,3,0x20},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d7461b5e8505e),0x4641,0x4320,0x300,0,0x220},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d7461b5e8505d),0x4641,0x4320,0x300,1,0x20},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d7461b5e8505e),0x4641,0x4320,0x300,2,0x220},
+ {UINT64_C(0xab6423e91ac10b69),UINT64_C(0x941d7461b5e8505d),0x4641,0x4320,0x300,3,0x20},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a20000000000),0x4506,0x4282,0x0,0,0x20},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a20000000000),0x4506,0x4282,0x0,1,0x20},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a30000000000),0x4506,0x4282,0x0,2,0x220},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a20000000000),0x4506,0x4282,0x0,3,0x20},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a2442e5bb000),0x4506,0x4282,0x200,0,0x20},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a2442e5bb000),0x4506,0x4282,0x200,1,0x20},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a2442e5bb800),0x4506,0x4282,0x200,2,0x220},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a2442e5bb000),0x4506,0x4282,0x200,3,0x20},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a2442e5bb265),0x4506,0x4282,0x300,0,0x220},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a2442e5bb264),0x4506,0x4282,0x300,1,0x20},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a2442e5bb265),0x4506,0x4282,0x300,2,0x220},
+ {UINT64_C(0xefd0e73ef9c704eb),UINT64_C(0xf7c6a2442e5bb264),0x4506,0x4282,0x300,3,0x20},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11b0000000000),0x300e,0x3806,0x0,0,0x220},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a0000000000),0x300e,0x3806,0x0,1,0x20},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11b0000000000),0x300e,0x3806,0x0,2,0x220},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a0000000000),0x300e,0x3806,0x0,3,0x20},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a99ea983000),0x300e,0x3806,0x200,0,0x220},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a99ea982800),0x300e,0x3806,0x200,1,0x20},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a99ea983000),0x300e,0x3806,0x200,2,0x220},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a99ea982800),0x300e,0x3806,0x200,3,0x20},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a99ea982eb0),0x300e,0x3806,0x300,0,0x20},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a99ea982eb0),0x300e,0x3806,0x300,1,0x20},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a99ea982eb1),0x300e,0x3806,0x300,2,0x220},
+ {UINT64_C(0x855627e660121cc5),UINT64_C(0xb8c11a99ea982eb0),0x300e,0x3806,0x300,3,0x20},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f50000000000),0x6699,0x534c,0x0,0,0x220},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f40000000000),0x6699,0x534c,0x0,1,0x20},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f50000000000),0x6699,0x534c,0x0,2,0x220},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f40000000000),0x6699,0x534c,0x0,3,0x20},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f4bc803d4000),0x6699,0x534c,0x200,0,0x220},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f4bc803d3800),0x6699,0x534c,0x200,1,0x20},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f4bc803d4000),0x6699,0x534c,0x200,2,0x220},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f4bc803d3800),0x6699,0x534c,0x200,3,0x20},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f4bc803d3d35),0x6699,0x534c,0x300,0,0x20},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f4bc803d3d35),0x6699,0x534c,0x300,1,0x20},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f4bc803d3d36),0x6699,0x534c,0x300,2,0x220},
+ {UINT64_C(0xc1e28ae84f167acb),UINT64_C(0x9d88f4bc803d3d35),0x6699,0x534c,0x300,3,0x20},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8e0000000000),0x2afc,0x357d,0x0,0,0x220},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d0000000000),0x2afc,0x357d,0x0,1,0x20},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8e0000000000),0x2afc,0x357d,0x0,2,0x220},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d0000000000),0x2afc,0x357d,0x0,3,0x20},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d89fe8e9000),0x2afc,0x357d,0x200,0,0x220},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d89fe8e8800),0x2afc,0x357d,0x200,1,0x20},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d89fe8e9000),0x2afc,0x357d,0x200,2,0x220},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d89fe8e8800),0x2afc,0x357d,0x200,3,0x20},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d89fe8e8fc2),0x2afc,0x357d,0x300,0,0x20},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d89fe8e8fc2),0x2afc,0x357d,0x300,1,0x20},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d89fe8e8fc3),0x2afc,0x357d,0x300,2,0x220},
+ {UINT64_C(0xcfde1d58ab3f80e8),UINT64_C(0xe6ae8d89fe8e8fc2),0x2afc,0x357d,0x300,3,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0000000000),0x327a,0x393c,0x0,0,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0000000000),0x327a,0x393c,0x0,1,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4b0000000000),0x327a,0x393c,0x0,2,0x220},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0000000000),0x327a,0x393c,0x0,3,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0a7e3d9000),0x327a,0x393c,0x200,0,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0a7e3d9000),0x327a,0x393c,0x200,1,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0a7e3d9800),0x327a,0x393c,0x200,2,0x220},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0a7e3d9000),0x327a,0x393c,0x200,3,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0a7e3d9286),0x327a,0x393c,0x300,0,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0a7e3d9286),0x327a,0x393c,0x300,1,0x20},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0a7e3d9287),0x327a,0x393c,0x300,2,0x220},
+ {UINT64_C(0xd5e0df5e1c08a851),UINT64_C(0xe9fe4a0a7e3d9286),0x327a,0x393c,0x300,3,0x20},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e10000000000),0x5e71,0x4f38,0x0,0,0x220},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e00000000000),0x5e71,0x4f38,0x0,1,0x20},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e10000000000),0x5e71,0x4f38,0x0,2,0x220},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e00000000000),0x5e71,0x4f38,0x0,3,0x20},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e0d28faf5800),0x5e71,0x4f38,0x200,0,0x20},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e0d28faf5800),0x5e71,0x4f38,0x200,1,0x20},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e0d28faf6000),0x5e71,0x4f38,0x200,2,0x220},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e0d28faf5800),0x5e71,0x4f38,0x200,3,0x20},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e0d28faf5983),0x5e71,0x4f38,0x300,0,0x220},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e0d28faf5982),0x5e71,0x4f38,0x300,1,0x20},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e0d28faf5983),0x5e71,0x4f38,0x300,2,0x220},
+ {UINT64_C(0xa7454689f0726e23),UINT64_C(0x9252e0d28faf5982),0x5e71,0x4f38,0x300,3,0x20},
+ };
+ for(unsigned m=0;m<2;++m) for(unsigned k=0;k<sizeof(v)/sizeof(v[0]);++k) {
+  e87_t n;e87_init(&n,m);n.tags=0xfffc;n.control=(n.control&~0xf00)|v[k].pc|(v[k].rc<<10);
+  n.reg[0]=(e87_real80_t){v[k].sig,v[k].exp};
+  CHECK(e87_numeric(&n,0xd9,0xfa,0,0));
+  CHECK(n.reg[0].significand==v[k].out && n.reg[0].sign_exponent==v[k].oe);
+  CHECK((n.status&0x23f)==v[k].flags);
+ }
+ for(unsigned m=0;m<2;++m) for(int k=1;k<50;++k) {
+  e87_t n;e87_init(&n,m);n.tags=0xfffc;n.reg[0]=whole(k*k);
+  CHECK(e87_numeric(&n,0xd9,0xfa,0,0));same_value(n.reg[0],whole(k));CHECK(!(n.status&0x3f));
+ }
+}
+
+static void arithmetic_exception_checks(void)
+{
+    const e87_real80_t one={UINT64_C(0x8000000000000000),0x3fff};
+    const e87_real80_t special[]={ {0,0}, {UINT64_C(0x8000000000000000),0x7fff},
+      {UINT64_C(0xc123000000000000),0xffff}, {UINT64_C(0x4000000000000000),0},
+      {UINT64_C(0x4000000000000000),0x3fff} };
+    for(unsigned m=0;m<2;++m) for(unsigned mask=0;mask<2;++mask) for(unsigned k=0;k<5;++k) {
+        e87_t n;e87_init(&n,m);n.tags=0xfff0;n.reg[0]=one;n.reg[1]=special[k];
+        n.tags|=(k==0?1:k<4?2:0)<<2;
+        unsigned exception=k==0?4:k==1?0:1;
+        if(exception) n.control=(n.control&~exception)|(mask?exception:0);
+        CHECK(e87_numeric(&n,0xd8,0xf1,0,0));
+        CHECK((n.status&0x3f)==(exception|(k==3?2:0)));
+        if(exception && !mask) {same_value(n.reg[0],one);CHECK(n.status&0x80);}
+        else if(k==1) {CHECK(!n.reg[0].significand && !n.reg[0].sign_exponent);}
+        else if(k==2) same_value(n.reg[0],special[k]);
+        else CHECK(n.reg[0].sign_exponent==(k==0?0x7fff:0xffff));
+    }
+    for(unsigned m=0;m<2;++m) for(unsigned mask=0;mask<2;++mask) for(unsigned k=0;k<4;++k) {
+        e87_t n;e87_init(&n,m);n.tags=0xfffc;
+        n.reg[0]=k==0?whole(-1):k==1?special[3]:k==2?special[4]:special[1];
+        if(k==1 || k==3)n.tags|=2;
+        n.control=(n.control&~1u)|mask;e87_real80_t before=n.reg[0];
+        CHECK(e87_numeric(&n,0xd9,0xfa,0,0));CHECK((n.status&0x3f)==(k==1?3:1));
+        if(!mask)same_value(n.reg[0],before);else CHECK(n.reg[0].sign_exponent==0xffff);
+    }
+    for(unsigned m=0;m<2;++m) for(unsigned k=0;k<2;++k) {
+        e87_t n;e87_init(&n,m);n.tags=0xfff0;n.control&=~(k?0x10u:8u);
+        n.reg[0]=(e87_real80_t){one.significand,k?1:0x7ffe};n.reg[1]=whole(k?0:4);
+        if(k)n.reg[1]=(e87_real80_t){one.significand,0x3ffd};
+        CHECK(e87_numeric(&n,0xd8,0xc9,0,0));
+        CHECK((n.status&0xbf)==(k?0x90:0x88));CHECK(n.reg[0].significand==one.significand);
+        CHECK(n.reg[0].sign_exponent==(k?24575:8192));
+    }
+}
+static void multiplication_division(void)
+{
+    const unsigned ops[]={0xd8,0xdc,0xde}, groups[]={0xc8,0xf0,0xf8}, pcs[]={0,0x200,0x300};
+    for(unsigned model=0;model<2;++model) for(unsigned form=0;form<3;++form)
+    for(unsigned kind=0;kind<3;++kind) for(unsigned sign=0;sign<4;++sign)
+    for(unsigned t=0;t<8;++t) for(unsigned pc=0;pc<3;++pc) for(unsigned rc=0;rc<4;++rc) {
+        e87_t n;e87_init(&n,model);unsigned i=(t+1)&7,d=form?i:t;
+        n.status=t<<11;n.tags=0xffff&~((3u<<(2*t))|(3u<<(2*i)));
+        n.control=(n.control&~0xf00)|pcs[pc]|(rc<<10);
+        n.reg[t]=(e87_real80_t){UINT64_C(0x8000000000000000),0x4001|((sign&1)<<15)};
+        n.reg[i]=(e87_real80_t){UINT64_C(0x8000000000000000),0x4000|((sign>>1)<<15)};
+        CHECK(e87_numeric(&n,ops[form],groups[kind]|1,0,0));
+        CHECK(n.reg[d].significand==UINT64_C(0x8000000000000000));
+        CHECK(n.reg[d].sign_exponent==((kind==0?0x4002:kind==1?0x4000:0x3ffe)|(((sign^(sign>>1))&1)<<15)));
+        CHECK(e87_top(&n)==((t+(form==2))&7) && !(n.status&0xbf));
+        CHECK(((n.tags>>(2*d))&3)==0);
+    }
+    const unsigned widths[]={24,53,64};
+    for(unsigned model=0;model<2;++model) for(unsigned p=0;p<3;++p)
+    for(unsigned rc=0;rc<4;++rc) for(unsigned neg=0;neg<2;++neg) for(unsigned mask=0;mask<2;++mask) {
+        e87_t n;e87_init(&n,model);n.tags=0xfff0;
+        n.control=(n.control&~0xf20u)|pcs[p]|(rc<<10)|(mask?0x20:0);
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff|(neg<<15)};
+        n.reg[1]=(e87_real80_t){UINT64_C(0xc000000000000000),0x4000};
+        unsigned __int128 numerator=(unsigned __int128)1<<(widths[p]+1);
+        uint64_t floor=numerator/3;unsigned rem=numerator%3;
+        unsigned up=rc==0?rem==2:rc==1?neg:rc==2?!neg:0;
+        CHECK(e87_numeric(&n,0xd8,0xf1,0,0));
+        CHECK(n.reg[0].significand==((floor+up)<<(64-widths[p])));
+        CHECK(n.reg[0].sign_exponent==(0x3ffd|(neg<<15)));
+        CHECK((n.status&0xa0)==(mask?0x20:0xa0) && !!(n.status&0x200)==up);
+    }
+    for(unsigned model=0;model<2;++model) for(unsigned k=0;k<5;++k) {
+        e87_t n;e87_init(&n,model);n.tags=0xfff0;
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff};n.reg[1]=n.reg[0];
+        if(k==0) {n.reg[1]=(e87_real80_t){0,0};n.tags=0xfff4;}
+        if(k==1) n.reg[0]=n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x7ffe};
+        if(k==2) n.reg[0]=n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),1};
+        if(k==3) {n.reg[1]=(e87_real80_t){1,0};n.tags=0xfff8;}
+        if(k==4) {n.reg[1]=(e87_real80_t){UINT64_C(0xc123456789abcdef),0x7fff};n.tags=0xfff8;}
+        CHECK(e87_numeric(&n,0xd8,k==0?0xf1:0xc9,0,0));
+        const unsigned flags[]={4,0x28,0x30,2,1};
+        CHECK((n.status&0x3f)==flags[k]);
+        if(k<2) CHECK(n.reg[0].sign_exponent==0x7fff && n.reg[0].significand==UINT64_C(0x8000000000000000));
+        if(k==2) CHECK(!n.reg[0].significand && !n.reg[0].sign_exponent);
+        if(k==3) CHECK(n.reg[0].significand==1 && n.reg[0].sign_exponent==1);
+        if(k==4) CHECK(n.reg[0].significand==UINT64_C(0xc123456789abcdef) && n.reg[0].sign_exponent==0x7fff);
+    }
+}
+static void product_rounding_and_zero(void)
+{
+    const unsigned widths[]={24,53,64},pcs[]={0,0x200,0x300};
+    for(unsigned model=0;model<2;++model) for(unsigned p=0;p<3;++p)
+    for(unsigned rc=0;rc<4;++rc) for(unsigned neg=0;neg<2;++neg) {
+        e87_t n;e87_init(&n,model);n.tags=0xfff0;n.control=(n.control&~0xf00)|pcs[p]|(rc<<10);
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000)+(UINT64_C(1)<<(64-widths[p])),0x3fff|(neg<<15)};
+        n.reg[1]=(e87_real80_t){UINT64_C(0xc000000000000000),0x3fff};
+        unsigned up=rc==0 || rc==(neg?1:2);
+        CHECK(e87_numeric(&n,0xd8,0xc9,0,0));
+        CHECK(n.reg[0].significand==UINT64_C(0xc000000000000000)+((uint64_t)(up?2:1)<<(64-widths[p])));
+        CHECK(n.reg[0].sign_exponent==(0x3fff|(neg<<15)) && (n.status&0x20));
+        CHECK(!!(n.status&0x200)==up);
+    }
+    for(unsigned model=0;model<2;++model) for(unsigned neg=0;neg<2;++neg) {
+        e87_t n;e87_init(&n,model);n.tags=0xfff0;
+        n.reg[0]=n.reg[1]=(e87_real80_t){UINT64_C(0xc000000000000000),0x3fff};
+        CHECK(e87_numeric(&n,0xd8,0xc9,0,0));
+        CHECK(n.reg[0].significand==UINT64_C(0x9000000000000000) && n.reg[0].sign_exponent==0x4000);
+        for(unsigned op=0;op<2;++op) {
+            n.reg[0]=(e87_real80_t){0,neg<<15};n.tags=0xfff1;
+            CHECK(e87_numeric(&n,0xd8,op?0xf1:0xc9,0,0));
+            CHECK(n.reg[0].significand==0 && n.reg[0].sign_exponent==(neg<<15) && e87_tag(&n,0)==1);
+        }
+    }
+}
 static void subtraction_checks(void)
 {
     const unsigned ops[]={0xd8,0xdc,0xde}, pcs[]={0,0x200,0x300};
@@ -640,11 +1158,18 @@ int main(void)
         CHECK(n.reg[e87_top(&n)].sign_exponent == 0);
         CHECK(e87_tag(&n, 0) == 1);
         rejected(&n, 0xdb, 0x2e, 0); /* missing staged input */
-        rejected(&n, 0xd8, 0xc8, 0); /* unsupported operation */
+        CHECK(e87_numeric(&n, 0xd8, 0xd0, 0, 0)); /* self comparison */
+        CHECK((n.status&0x4500)==0x4000);
         n.status |= 0x80;
         if(model==E87_8087) n.control &= ~0x80u;
         rejected(&n, 0xd8, 0xc0, 0);
     }
+    product_rounding_and_zero();
+    multiplication_division();
+    memory_arithmetic_checks();
+    other_arithmetic_checks();
+    square_root_vectors();
+    arithmetic_exception_checks();
     subtraction_rounding();
     subtraction_checks();
     pending_disabled_checks();

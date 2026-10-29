@@ -193,3 +193,128 @@ int e87_mul80(e87_real80_t a,e87_real80_t b,unsigned p,unsigned r,e87_real80_t *
 { return product80(a,b,p,r,v,f,0); }
 int e87_div80(e87_real80_t a,e87_real80_t b,unsigned p,unsigned r,e87_real80_t *v,unsigned *f)
 { return product80(a,b,p,r,v,f,1); }
+
+/* Shared early-NPX range and precision response for product/quotient/scale.
+ * z has 64 significand bits and 63 guard/sticky bits. */
+static int finish_work(e87_wide_t z,int exponent,unsigned sign,unsigned width,
+                       unsigned rounding,unsigned control,e87_real80_t *result,unsigned *flags)
+{
+    e87_wide_t one=(e87_wide_t)1;
+    if(exponent<1 || exponent>=0x7fff) {
+
+        unsigned exception=exponent<1?0x10:0x08;
+        e87_real80_t value;
+        if (!(control & exception)) {
+            /* Early 287 register response: adjusted exponent, no rounding/PE. */
+            exponent += exception==0x10 ? 24576 : -24576;
+            if(exponent<1 || exponent>=0x7fff) return 0;
+            value=(e87_real80_t){(uint64_t)(z>>63),(sign<<15)|exponent};
+            *result=value;*flags=exception|0x80;return 1;
+        }
+        if(exception==0x08) {
+            if (!(z & (one<<126))) return 0;
+            return masked_overflow(sign,rounding,width,control,result,flags);
+        }
+        /* Masked underflow is rounded to the temporary-real 64-bit format,
+         * irrespective of PC. Preserve a sticky bit during gradual underflow. */
+        unsigned shift=1-exponent;
+        z=shift>=128 ? z!=0 : (z>>shift)|((z&((one<<shift)-1))!=0);
+        e87_wide_t rem=z&((one<<63)-1),half=one<<62,kept=z>>63;
+        unsigned up=rounding==0 ? rem>half || (rem==half && (kept&1)) :
+                    rounding==2 ? sign && rem : rounding==3 ? !sign && rem : 0;
+        kept+=up;
+        value=(e87_real80_t){(uint64_t)kept,(sign<<15)|((kept&(one<<63))?1:0)};
+        unsigned status=(rounding==1 || rem)?0x10:0;
+        if(rem) status|=0x20|((control&0x20)?0:0x80);
+        if(up) status|=0x200;
+        *result=value;*flags=status;return 1;
+    }
+    unsigned cut=63+64-width;
+    e87_wide_t rem=z&((one<<cut)-1),half=one<<(cut-1),kept=z>>cut;
+    unsigned increment=rounding==0 ? rem>half || (rem==half && (kept&1)) :
+                       rounding==2 ? sign && rem : rounding==3 ? !sign && rem : 0;
+    kept+=increment;
+    if(kept==(one<<width)) {kept>>=1;++exponent;}
+    if(exponent>=0x7fff) {
+        /* Masked carry overflow has the same delivered value as masked true
+         * overflow. Unmasked carry ordering is not inferred from the later x87. */
+        if (!(control&8)) return 0;
+        if (!masked_overflow(sign,rounding,width,control,result,flags)) return 0;
+        *flags |= 0x200; /* This path actually incremented the significand. */
+        return 1;
+    }
+
+    e87_real80_t value={(uint64_t)(kept<<(64-width)),(sign<<15)|exponent};
+    *result=value;*flags=(rem?0x20:0)|(increment?0x200:0);return 1;
+}
+int e87_product80(e87_real80_t a,e87_real80_t b,int divide,unsigned precision,
+                  unsigned rounding,unsigned control,e87_real80_t *result,unsigned *flags)
+{
+    int ea=a.sign_exponent&0x7fff,eb=b.sign_exponent&0x7fff;
+    unsigned sign=(a.sign_exponent^b.sign_exponent)>>15;
+    unsigned width=precision==32?24:precision==64?53:64;
+    e87_wide_t z, numerator, rem, tail;int exponent;
+    if(!result || !flags || rounding>3 || (precision!=32 && precision!=64 && precision!=80) ||
+       ea==0x7fff || eb==0x7fff || (divide && !(b.significand>>63))) return 0;
+    if(!ea) ea=1;
+    if(!eb) eb=1;
+    if(divide) {
+        exponent=ea-eb+0x3fff;
+        unsigned shift=63;
+        if((a.significand>>63) && a.significand<b.significand) {++shift;--exponent;}
+        numerator=(e87_wide_t)a.significand<<shift;
+        z=(numerator/b.significand)<<63;rem=numerator%b.significand;
+        tail=(rem<<63)/b.significand;
+        z|=tail|(((rem<<63)%b.significand)!=0);
+    } else {
+        exponent=ea+eb-0x3fff;
+        z=(e87_wide_t)a.significand*b.significand;
+        if(z>>127) {z=(z>>1)|(z&1);++exponent;}
+    }
+    if(!z) {
+        /* True zero gives true zero; pseudozero retains its unnormal scale. */
+        unsigned pseudo=(a.significand==0 && (a.sign_exponent&0x7fff)) ||
+                        (b.significand==0 && (b.sign_exponent&0x7fff));
+        if(pseudo && (exponent<1 || exponent>=0x7fff)) return 0;
+        *result=(e87_real80_t){0,(sign<<15)|(pseudo?exponent:0)};*flags=0;return 1;
+    }
+    return finish_work(z,exponent,sign,width,rounding,control,result,flags);
+}
+
+/* Exact integer square root of a 128-bit radicand. The remainder is retained
+ * for rounding at the requested precision, avoiding double rounding. */
+int e87_sqrt80(e87_real80_t a,unsigned precision,unsigned rounding,e87_real80_t *r,unsigned *flags)
+{
+    unsigned width=precision==32?24:precision==64?53:64;
+    int e=(a.sign_exponent&0x7fff)-0x3fff;
+    if(!r || !flags || rounding>3 || (precision!=32 && precision!=64 && precision!=80) ||
+       a.sign_exponent>>15 || !(a.significand>>63) || (a.sign_exponent&0x7fff)==0x7fff) return 0;
+    unsigned odd=(e%2)!=0;
+    e87_wide_t original=(e87_wide_t)a.significand<<(63+odd),rem=original,root=0,bit=(e87_wide_t)1<<126;
+    while(bit>rem) bit>>=2;
+    while(bit) {
+        if(rem>=root+bit) {rem-=root+bit;root=(root>>1)+bit;}
+        else root>>=1;
+        bit>>=2;
+    }
+    unsigned cut=64-width;
+    e87_wide_t q=root>>cut,low=root&(((e87_wide_t)1<<cut)-1);
+    unsigned inexact=rem || low,up=0;
+    if(rounding==0) {
+        if(!cut) up=rem>root;
+        else {
+            e87_wide_t mid=(q<<cut)+((e87_wide_t)1<<(cut-1));
+            up=original>mid*mid || (original==mid*mid && (q&1));
+        }
+    } else if(rounding==3) up=inexact;
+    q+=up;e=(e-(int)odd)/2+0x3fff;
+    if(q==((e87_wide_t)1<<width)) {q>>=1;++e;}
+    *r=(e87_real80_t){(uint64_t)q<<cut,e};*flags=(inexact?0x20:0)|(up?0x200:0);return 1;
+}
+int e87_scale80(e87_real80_t a,int scale,unsigned rounding,unsigned control,e87_real80_t *r,unsigned *flags)
+{
+    if(!r || !flags || rounding>3 || scale < -32768 || scale>32767) return 0;
+    if(!a.significand) {*r=a;*flags=0;return 1;}
+    int e=a.sign_exponent&0x7fff;if(!e)e=1;
+    return finish_work((e87_wide_t)a.significand<<63,e+scale,a.sign_exponent>>15,64,rounding,control,r,flags);
+}

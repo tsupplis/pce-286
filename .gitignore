@@ -104,3 +104,7 @@ tests/test_port92
 /tests/test_npx_memory
 
 /tests/npxovf.com
+
+/tests/test_npx_convert
+
+/tests/test_npx_trans
