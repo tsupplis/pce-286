@@ -89,6 +89,11 @@ int e87_control(e87_t *n, unsigned opcode, unsigned modrm, uint16_t *ax)
             n->wait_error = 0;
             return 1;
         case 0xe3: e87_fninit(n); return 1;
+        /* IIT bank-selection/matrix probes are ignored by this Intel model. This
+         * narrow compatibility policy lets CheckIt distinguish Intel from
+         * IIT; it does not enable extra banks or all reserved encodings. */
+        case 0xe8: case 0xea: case 0xeb: case 0xf1:
+            return n->model == E87_80287;
         case 0xe4:
             if (n->model != E87_80287) return 0;
             n->protected_mode = 1;

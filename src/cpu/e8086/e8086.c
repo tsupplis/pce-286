@@ -91,6 +91,7 @@ void e86_init (e8086_t *c)
 	c->pq_fill = 6;
 
 	c->irq = 0;
+	c->nmi_line = c->nmi_pending = c->nmi_blocked = c->nmi_shadow = 0;
 
 	c->state = 0;
 
@@ -524,6 +525,12 @@ void e86_fault_error (e8086_t *c, unsigned n, unsigned error)
  e86_raise_fault(c,n,1,error);
 }
 
+void e86_nmi (e8086_t *cpu, unsigned char val)
+{
+	if (val && !cpu->nmi_line) cpu->nmi_pending = 1;
+	cpu->nmi_line = (val != 0);
+}
+
 void e86_irq (e8086_t *cpu, unsigned char val)
 {
 	cpu->irq = (val != 0);
@@ -628,6 +635,7 @@ void e86_reset (e8086_t *c)
 	c->pq_cnt = 0;
 
 	c->irq = 0;
+	c->nmi_line = c->nmi_pending = c->nmi_blocked = c->nmi_shadow = 0;
 
 	c->state = 0;
 
@@ -645,6 +653,18 @@ void e86_execute (e8086_t *c)
 {
 	unsigned cnt;
 	char     irq;
+
+    if (c->nmi_pending && !c->nmi_blocked && !c->nmi_shadow &&
+        !(c->state & (E86_STATE_RESET | E86_STATE_SHUTDOWN | E86_STATE_NPX_STOP))) {
+        c->nmi_pending = 0;
+        c->nmi_blocked = 1;
+        c->state &= ~E86_STATE_HALT;
+        e86_trap(c, 2);
+        e86_set_clk(c, 50);
+        return;
+    }
+
+    c->nmi_shadow = 0;
 
 	if ((c->cpu & E86_CPU_NEC) && !(c->flg & 0x8000) &&
 	    !(c->state & E86_STATE_RESET)) {

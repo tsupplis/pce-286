@@ -24,6 +24,7 @@
 #define PCE_IBMPC_H 1
 
 
+#include "npx.h"
 #include "at-keyboard.h"
 #include "covox.h"
 #include "ems.h"
@@ -92,6 +93,7 @@ typedef struct {
 
 typedef struct ibmpc_t {
 	e8086_t            *cpu;
+	pc_npx_t           npx;
 	video_t            *video;
 	disks_t            *dsk;
 	disk_t             *dsk0;

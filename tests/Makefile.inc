@@ -634,3 +634,32 @@ DIST += tests/npx_trans_vectors.h
 
 DIST += tests/generate_npx_trans_vectors.py
 tests/test_npx_execute tests/test_npx_convert tests/test_npx_memory tests/test_npx_trans: src/cpu/e8087/transcendental.h
+
+tests/test_npx_trans: tests/npx_tangent_vectors.h
+DIST += tests/npx_tangent_vectors.h tests/generate_npx_tangent_vectors.py
+
+# Explicit real-chip capture utility, never executed by check targets.
+.PHONY: npx-trans-probe
+npx-trans-probe: tests/npxtrans.com
+tests/npxtrans.com: $(srcdir)/tests/asm/npxtrans.asm
+	$(NASM) -f bin $< -o $@
+CLN += tests/npxtrans.com
+DIST += tests/asm/npxtrans.asm tests/decode_npx_trans.py
+
+# Real PC/XT and AT board wiring, no external ROM/image required.
+.PHONY: check-npx-board
+check-npx-board: tests/test_npx_board
+	./tests/test_npx_board
+check-npx-unit: check-npx-board
+check-build: tests/test_npx_board
+tests/test_npx_board.o: tests/test_npx_board.c src/arch/ibmpc/ibmpc.h src/arch/ibmpc/npx.h $(E8086_HDR)
+	$(CC) -c $(PCE_IBMPC_CFLAGS) -o $@ $<
+tests/test_npx_board: tests/test_npx_board.o tests/test_at_io_audit_main.o $(filter-out src/arch/ibmpc/main.o,$(PCE_IBMPC_OBJ)) $(PCE_IBMPC_OBJ_EXT)
+	$(LD) $(PCE_IBMPC_LDFLAGS) -o $@ $^ $(PCE_IBMPC_LIBS) -lm
+CLN += tests/test_npx_board tests/test_npx_board.o
+DIST += tests/test_npx_board.c
+
+.PHONY: check-npx-guest
+check-npx-guest: $(PCE_IBMPC_BIN)
+	python3 tests/test_npx_guest.py --emulator $(PCE_IBMPC_BIN)
+DIST += tests/test_npx_guest.py tests/asm/tnpxboard.asm

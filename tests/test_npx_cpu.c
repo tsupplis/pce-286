@@ -44,6 +44,13 @@ int main(void)
         step(c,0xdb,0xe3);
         CHECK(n.status==0x200 && n.tags==0xffff && c->ip==0x102);
         if(model) {
+            /* CheckIt's IIT extension probes must advance on the Intel 287. */
+            const unsigned probes[] = {0xe8, 0xea, 0xeb, 0xf1};
+            for (unsigned k = 0; k < 4; ++k) {
+                unsigned short ip = c->ip;
+                step(c, 0xdb, probes[k]);
+                CHECK(c->ip == ip + 2 && !(c->state & E86_STATE_NPX_STOP));
+            }
             step(c,0xdb,0xe4);CHECK(n.protected_mode);
             step(c,0xdb,0xe3);CHECK(n.protected_mode);
             n.status=0x3800;step(c,0xdf,0xe0);CHECK(e86_get_ax(c)==0x3800);

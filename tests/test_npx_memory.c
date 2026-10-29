@@ -4,11 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 static unsigned char ram[65536];
-static unsigned checks, failures, calls, operand_writes;
+static unsigned checks, failures, calls, operand_writes, priority_reads, priority_writes;
 #define CHECK(x) do { ++checks; if (!(x)) { ++failures; fprintf(stderr,"line %d: %s\n",__LINE__,#x); } } while (0)
-static unsigned char r8(void *p,unsigned long a) { (void)p; return ram[a&65535]; }
+static unsigned char r8(void *p,unsigned long a) { (void)p; if(a>=0x9000 && a<0x900a) ++priority_reads; return ram[a&65535]; }
 static unsigned short r16(void *p,unsigned long a) { return r8(p,a)|(r8(p,a+1)<<8); }
-static void w8(void *p,unsigned long a,unsigned char v) { (void)p; if(a>=0x600 && a<0x60a) ++operand_writes; ram[a&65535]=v; }
+static void w8(void *p,unsigned long a,unsigned char v) { (void)p; if(a>=0x9000 && a<0x900a) ++priority_writes; if(a>=0x600 && a<0x60a) ++operand_writes; ram[a&65535]=v; }
 static void w16(void *p,unsigned long a,unsigned short v) { w8(p,a,v);w8(p,a+1,v>>8); }
 static int control(void *p,unsigned op,unsigned mr,unsigned short *ax)
 { ++calls; return e87_control(p,op,mr,ax); }
@@ -384,21 +384,99 @@ static void pending_287(void)
         e86_del(c);
     }
 }
+/* Simultaneously pending #7 and operand faults, for loads and stores.
+ * Check the frame, absence of operand I/O and unchanged NPX state. */
+static void device_not_available_priority(void)
+{
+    for(unsigned bits=1;bits<4;++bits) for(unsigned store=0;store<2;++store)
+    for(unsigned stack=0;stack<2;++stack) for(unsigned edge=0;edge<3;++edge) {
+        e8086_t *c=cpu(1);e87_t n,before;e87_init(&n,E87_80287);
+        protected_setup(c);
+        w16(0,0x3038,0x400);w16(0,0x303a,8);ram[0x303d]=0x86;
+        unsigned reg=stack?E86_REG_SS:E86_REG_DS;
+        /* SS also hosts the exception frame: put the operand above SP. */
+        unsigned operand=0x9000;
+        c->seg_limit[reg]=edge==0?operand:edge==1?operand+1:0xffff;
+        if(edge==2 && !stack)c->seg_ar[reg]=0; /* null/unusable DS */
+        e86_set_bx(c,operand);e86_set_bp(c,operand);e86_set_si(c,0);
+        c->msw|=bits<<2;
+        e86_set_npx_control(c,&n,e87_cpu_control);
+        e86_set_npx_memory(c,e87_cpu_memory);e86_set_npx_event(c,e87_cpu_event);
+        e86_set_npx_address(c,e87_cpu_address);
+        before=n;memset(ram+operand,0xa5,10);priority_reads=priority_writes=0;
+        step(c,0xdb,(store?0x38:0x28)|(stack?2:7));
+        CHECK(c->int_vec==7 && c->ip==0x400);
+        CHECK(priority_reads==0 && priority_writes==0);
+        CHECK(e86_get_sp(c)==0x7ffa && r16(0,0x7ffa)==0x100);
+        CHECK(!memcmp(&n,&before,sizeof n));
+        CHECK(!(c->state&E86_STATE_NPX_STOP));
+        for(unsigned j=0;j<10;++j)CHECK(ram[operand+j]==0xa5);
+        e86_del(c);
+    }
+}
+/* Independent ESC memory-format table: signed size, negative means store.
+ * Validate every ModR/M addressing encoding, including reserved groups and
+ * register forms, without executing or mutating the NPX during size queries. */
+static void memory_decode_audit(void)
+{
+    static const int formats[8][8]={
+      {4,4,4,4,4,4,4,4}, {4,0,-4,-4,14,2,-14,-2},
+      {4,4,4,4,4,4,4,4}, {4,0,-4,-4,0,10,0,-10},
+      {8,8,8,8,8,8,8,8}, {8,0,-8,-8,94,0,-94,-2},
+      {2,2,2,2,2,2,2,2}, {2,0,-2,-2,10,8,-10,-8}};
+    for(unsigned model=0;model<2;++model)for(unsigned op=0xd8;op<=0xdf;++op)
+    for(unsigned mr=0;mr<256;++mr) {
+        e87_t n;e87_init(&n,model);n.tags=0x1234;n.status=0x4581;
+        e87_t before=n;
+        int expected=mr>=0xc0?0:formats[op-0xd8][(mr>>3)&7];
+        int answer=e87_cpu_memory(&n,op,mr,1,0);
+        unsigned direction=answer&3, size=answer>2?(unsigned)answer>>2:10;
+        CHECK(expected ? direction==(expected<0?2:1) && size==(unsigned)(expected<0?-expected:expected) : answer==0);
+        CHECK(!memcmp(&n,&before,sizeof n));
+    }
+}
+static void pending_memory_control_priority(void)
+{
+    const unsigned ops[]={0xd9,0xd9,0xdd,0xd9,0xd9,0xdd,0xdd};
+    const unsigned groups[]={4,5,4,6,7,6,7};
+    for(unsigned k=0;k<7;++k)for(unsigned unavailable=0;unavailable<2;++unavailable) {
+        e8086_t *c=cpu(1);e87_t n,before;e87_init(&n,E87_80287);
+        protected_setup(c);c->idtr_limit=0x87;
+        w16(0,0x3038,0x400);w16(0,0x303a,8);ram[0x303d]=0x86;
+        w16(0,0x3080,0x600);w16(0,0x3082,8);ram[0x3085]=0x86;
+        c->seg_limit[E86_REG_DS]=0x8fff;e86_set_bx(c,0x9000);
+        if(unavailable)c->msw|=8;
+        n.control&=~1u;e87_raise_exception(&n,1);before=n;
+        e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_memory(c,e87_cpu_memory);
+        e86_set_npx_event(c,e87_cpu_event);e86_set_npx_address(c,e87_cpu_address);
+        priority_reads=priority_writes=0;step(c,ops[k],(groups[k]<<3)|7);
+        unsigned vector=unavailable?7:k<3?16:13;
+        CHECK(c->int_vec==vector && c->ip==(vector==7?0x400:vector==16?0x600:0x500));
+        CHECK(!memcmp(&n,&before,sizeof n));
+        CHECK(!priority_reads && !priority_writes && !(c->state&E86_STATE_NPX_STOP));
+        CHECK(e86_get_sp(c)==(vector==13?0x7ff8:0x7ffa));
+        CHECK(r16(0,0x7ffa)==0x100);
+        e86_del(c);
+    }
+}
 static void guest_constants_transcendentals(void)
 {
- const unsigned forms[]={0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xf0,0xf1,0xf3,0xf9};
- for(unsigned m=0;m<2;++m)for(unsigned k=0;k<11;++k){
+ const unsigned forms[]={0xe8,0xe9,0xea,0xeb,0xec,0xed,0xee,0xf0,0xf1,0xf3,0xf9,0xf2};
+ for(unsigned m=0;m<2;++m)for(unsigned k=0;k<12;++k){
   e8086_t *c=cpu(m);e87_t n;e87_init(&n,m);n.tags=0xfff0;
   n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3ffd};
   n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3ffc};n.operand_pointer=0x12345;
   e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_address(c,e87_cpu_address);
   step(c,0xd9,forms[k]);CHECK(c->ip==0x102 && !(c->state&E86_STATE_NPX_STOP));
   CHECK(n.opcode==(0x100|forms[k])&&n.instruction_pointer==0x100);
-  CHECK(n.operand_pointer==0x12345);CHECK(e87_top(&n)==(k<7?7:k==7?0:1));e86_del(c);
+  CHECK(n.operand_pointer==0x12345);CHECK(e87_top(&n)==(k<7||k==11?7:k==7?0:1));e86_del(c);
  }
 }
 int main(void)
 {
+    memory_decode_audit();
+    pending_memory_control_priority();
+    device_not_available_priority();
     guest_constants_transcendentals();
     guest_product();
     guest_memory_arithmetic();

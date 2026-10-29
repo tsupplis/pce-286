@@ -330,6 +330,14 @@ void pc_set_port8 (ibmpc_t *pc, unsigned long addr, unsigned char val)
 	}
 
 	switch (addr) {
+	case 0x00a0:
+        if (!(pc->model & PCE_IBMPC_5170)) pc_npx_write(pc, addr, val);
+        break;
+    case 0x00f0:
+    case 0x00f1:
+        if (pc->model & PCE_IBMPC_5170) pc_npx_write(pc, addr, val);
+        break;
+
 	case 0x0060:
 		/* 8042 data port write — AT only (5170).
 		 * On 5160 this is covered by the PPI block. */
@@ -2489,7 +2497,7 @@ void pc_cmos_populate_from_config (ibmpc_t *pc)
 	/* --- Equipment byte (0x14) ---
 	 * Bits 7:6 = number of floppies - 1 (0 = 1 floppy, 1 = 2 floppies)
 	 * Bits 5:4 = display (0=EGA/VGA, 1=CGA40, 2=CGA80, 3=mono)
-	 * Bit  1   = math coprocessor (0 — not emulated)
+	 * Bit  1   = configured math coprocessor
 	 * Bit  0   = floppy drive(s) present
 	 *
 	 * Determine display type from config (same logic as pc_setup_video).
@@ -2517,7 +2525,7 @@ void pc_cmos_populate_from_config (ibmpc_t *pc)
 
 		d[0x14] = (unsigned char)(
 			((pc->fd_cnt > 1 ? pc->fd_cnt - 1 : 0) << 6) |
-			(disp << 4) |
+			(disp << 4) | (pc->npx.enabled ? 2 : 0) |
 			(pc->fd_cnt > 0 ? 0x01 : 0x00));
 	}
 
@@ -2602,6 +2610,8 @@ void pc_setup_at_rtc (ibmpc_t *pc, ini_sct_t *ini)
 ibmpc_t *pc_new (ini_sct_t *ini)
 {
 	ibmpc_t *pc;
+	int npx_model = pc_npx_config (ini);
+	if (npx_model < 0) return NULL;
 
 	pc = malloc (sizeof (ibmpc_t));
 	if (pc == NULL) {
@@ -2609,6 +2619,7 @@ ibmpc_t *pc_new (ini_sct_t *ini)
 	}
 
 	pc->cfg = ini;
+	memset (&pc->npx, 0, sizeof pc->npx);
 
 	pc->disk_id = 0;
 
@@ -2628,6 +2639,7 @@ ibmpc_t *pc_new (ini_sct_t *ini)
 	pc_setup_dma (pc, ini);
 	pc_setup_pic (pc, ini);
 	pc_setup_pic2 (pc);          /* AT: slave PIC — no-op for 5150/5160 */
+	pc_npx_init (pc, npx_model);
 	pc_setup_dma2 (pc);          /* AT: second DMA — no-op for 5150/5160 */
 	pc_setup_pit (pc, ini);
 	pc_setup_ppi (pc, ini);
@@ -2955,6 +2967,8 @@ void pc_reset (ibmpc_t *pc)
 		e8237_reset (&pc->dma2);
 	}
 
+	pc_npx_reset (pc);
+
 	/* Reset the keyboard controller only on an AT motherboard. */
 	if (PC_HAS_8042 (pc)) {
 		pc_at_kbd_init (pc);
@@ -3106,6 +3120,8 @@ void pc_clock (ibmpc_t *pc, unsigned long cnt)
 		spd = 4 * pc->speed_current;
 	}
 
+	pc_npx_check_stop (pc);
+
 	pc->clock1 += cnt;
 
 	if (pc->clock1 < spd) {
@@ -3207,6 +3223,13 @@ void pc_clock (ibmpc_t *pc, unsigned long cnt)
 
 int pc_set_cpu_model (ibmpc_t *pc, const char *str)
 {
+    if (pc->npx.enabled &&
+        (pc->npx.core.model == E87_80287 ? strcmp(str, "80286") != 0 :
+         (strcmp(str, "8086") != 0 && strcmp(str, "8088") != 0))) {
+        pce_log(MSG_ERR, "*** CPU model %s is incompatible with attached NPX\n", str);
+        return 1;
+    }
+
 	if (strcmp (str, "8086") == 0) {
 		e86_set_8086 (pc->cpu);
 	}

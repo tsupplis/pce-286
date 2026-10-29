@@ -519,10 +519,28 @@ static int constant(e87_t *n,unsigned mr)
     result80(n,p,values[mr-0xe8]);
     n->status=(n->status&~0x3800u)|(p<<11);return 1;
 }
+static int tangent(e87_t *n)
+{
+    unsigned t=e87_top(n),p=(t+7)&7;e87_real80_t x=n->reg[t],num,den;
+    /* Before-operation stack failure is documented; masked result payloads
+     * need original-chip evidence. Do not invent those two result slots. */
+    if(e87_tag(n,0)==3 || ((n->tags>>(2*p))&3)!=3){
+        if(n->control&1)return 0;
+        e87_raise_exception(n,1);return 1;
+    }
+    unsigned e=x.sign_exponent&0x7fff;
+    if(!finite(x) || ((x.sign_exponent&0x8000)&&x.significand) || e>0x3ffe ||
+       (e==0x3ffe&&x.significand>UINT64_C(0xc90fdaa22168c234)))return 0;
+    if(!e87_tangent(x,(n->control>>10)&3,&num,&den))return 0;
+    result80(n,t,num);result80(n,p,den);n->status=(n->status&~0x3800u)|(p<<11);
+    if(x.significand)e87_raise_exception(n,0x20);
+    return 1;
+}
 static int transcendental_opcode(unsigned op,unsigned mr)
-{return op==0xd9 && (mr==0xf0||mr==0xf1||mr==0xf3||mr==0xf9);}
+{return op==0xd9 && (mr==0xf0||mr==0xf1||mr==0xf2||mr==0xf3||mr==0xf9);}
 static int transcendental(e87_t *n,unsigned mr)
 {
+    if(mr==0xf2)return tangent(n);
     unsigned t=e87_top(n),i=(t+1)&7,binary=mr!=0xf0;
     e87_real80_t x=n->reg[t],y=n->reg[i],r;
     /* Invalid operands have undefined early-chip results, not the 387 domain
@@ -532,8 +550,10 @@ static int transcendental(e87_t *n,unsigned mr)
     if(mr==0xf0 && ((x.sign_exponent&0x8000&&x.significand)||ex>0x3ffe ||
         (ex==0x3ffe&&x.significand>UINT64_C(0x8000000000000000))))return 0;
     if((mr==0xf1||mr==0xf3) && (!x.significand||(x.sign_exponent&0x8000)))return 0;
+    /* Compatibility boundary: MicroWay 87TEST 1.02 uses atan(1). Accept
+     * positive equal operands; original-chip boundary bits are unverified. */
     if(mr==0xf3 && ((y.sign_exponent&0x8000&&y.significand)||ey>ex||
-        (ey==ex&&y.significand>=x.significand)))return 0;
+        (ey==ex&&y.significand>x.significand)))return 0;
     /* Largest representable magnitude strictly below 1-sqrt(1/2). */
     if(mr==0xf9 && (ex>0x3ffd || (ex==0x3ffd&&x.significand>UINT64_C(0x95f619980c4336f7))))return 0;
     /* Preserve exact cases without turning intermediate approximation error
@@ -546,13 +566,12 @@ static int transcendental(e87_t *n,unsigned mr)
         flags=flags?0x20:0;
     }else if((mr==0xf0&&!x.significand)||(mr==0xf3&&!y.significand)||
              ((mr==0xf1||mr==0xf9)&&(!y.significand||(mr==0xf9&&!x.significand)))){
-        r=(e87_real80_t){0,0};
+        r=(e87_real80_t){0,mr==0xf0?(x.sign_exponent&0x8000):0};
         /* Non-power logarithmic zero products have the sign of Y*log(X). */
         if(mr==0xf1)r.sign_exponent=(y.sign_exponent&0x8000)^(ex<0x3fff?0x8000:0);
         if(mr==0xf9)r.sign_exponent=(y.sign_exponent^x.sign_exponent)&0x8000;
     }else{
-        if(!e87_transcendental(mr,x,y,(n->control>>10)&3,&r))return 0;
-        flags=0x20;
+        if(!e87_transcendental(mr,x,y,(n->control>>10)&3,n->control,&r,&flags))return 0;
     }
     result80(n,binary?i:t,r);if(binary)pop_preserving_cc(n,1);
     e87_raise_exception(n,flags);return 1;

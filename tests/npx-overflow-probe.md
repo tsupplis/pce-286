@@ -63,3 +63,32 @@ on 8087, and a synchronous emulator cannot establish concurrent hardware behavio
 
 References: Intel 80286/80287 PRM, table 1-11 and figure 4-3;
 Intel AP-113, instruction/error synchronization.
+
+## Transcendental capture
+
+Build with `make npx-trans-probe`. Run `NPXTRANS.COM` under DOS on a known
+original 8087 or 80287, then decode its `NPXTRANS.BIN` using:
+
+```sh
+python3 tests/decode_npx_trans.py NPXTRANS.BIN
+```
+
+Record chip model/revision and machine alongside the file. A 387, emulator, or
+zero-filled COM template is not evidence for the original chips. This utility
+requires an installed coprocessor; it does not detect one or install a handler.
+Like the overflow probe, it masks 8087 interrupt delivery with IEM, disables
+maskable CPU interrupts during capture, and uses no-wait FNSAVE immediately
+after the tested instruction. It leaves interrupts restored before DOS I/O.
+
+The 80 cases cover four RC settings and all-masked versus I/O/U/P-unmasked:
+FPTAN zero, tiny-path boundary, ordinary pair, empty/full stack; F2XM1 minimum
+normal and negative zero; FYL2X overflow; FYL2XP1 underflow. Normal setup loads
+Y then X while exceptions are masked, then installs the test control word.
+Full setup fills all eight registers; empty setup loads none.
+
+Each 122-byte record holds id/CW/opcode/setup, two real80 inputs, and a 94-byte
+FNSAVE image. Header: `NPXTRN1` plus NUL, 16-bit count 80 and record size 122.
+The decoder prints all eight logical register payloads, status and physical tag
+word. It validates structural metadata but deliberately reports no PASS/FAIL.
+The supplied program has been assembled and its template format checked, but
+**has not been executed on physical hardware**.

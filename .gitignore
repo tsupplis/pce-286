@@ -108,3 +108,5 @@ tests/test_port92
 /tests/test_npx_convert
 
 /tests/test_npx_trans
+
+/tests/test_npx_board

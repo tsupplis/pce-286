@@ -361,6 +361,10 @@ int main (int argc, char *argv[])
 	pce_path_ini (sct);
 
 	par_pc = pc_new (sct);
+	if (par_pc == NULL) {
+		pce_log (MSG_ERR, "*** machine creation failed\n");
+		return 1;
+	}
 
 	signal (SIGINT, sig_int);
 	signal (SIGTERM, sig_term);

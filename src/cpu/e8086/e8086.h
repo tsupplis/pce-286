@@ -203,6 +203,7 @@ typedef struct e8086_t {
 	unsigned char    state;
 
 	char             irq;
+	unsigned char    nmi_line, nmi_pending, nmi_blocked, nmi_shadow;
 
 	unsigned         int_cnt;
 	unsigned char    int_vec;
@@ -614,6 +615,7 @@ int e86_get_reg (e8086_t *c, const char *reg, unsigned long *val);
 int e86_set_reg (e8086_t *c, const char *reg, unsigned long val);
 
 void e86_irq (e8086_t *cpu, unsigned char val);
+void e86_nmi (e8086_t *cpu, unsigned char val);
 
 int e86_interrupt (e8086_t *cpu, unsigned n);
 

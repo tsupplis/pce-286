@@ -567,6 +567,7 @@ unsigned op_17 (e8086_t *c)
 	}
 	e86_set_clk (c, 8);
 
+	c->nmi_shadow = 1;
 	c->save_flags &= ~E86_FLG_I;
 	/* On 286, an SS load also suppresses the single-step trap at this
 	 * instruction boundary, allowing the following stack update to run. */
@@ -2677,6 +2678,7 @@ unsigned op_8e (e8086_t *c)
 		e86_pq_init (c);
 	}
 	else if (reg == E86_REG_SS) {
+		c->nmi_shadow = 1;
 		c->save_flags &= ~E86_FLG_I;
 		if (c->cpu & E86_CPU_FLAGS286) {
 			c->save_flags &= ~E86_FLG_T;
@@ -3881,6 +3883,9 @@ unsigned op_cf (e8086_t *c)
 {
 	unsigned short flg;
 	unsigned short new_cs;
+
+	/* IRET releases the external NMI inhibit, including faulting IRET. */
+	c->nmi_blocked = 0;
 
 	/*
 	 * 80286 PM: if NT (Nested Task, bit 14) is set in FLAGS, IRET

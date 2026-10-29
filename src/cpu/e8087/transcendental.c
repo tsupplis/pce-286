@@ -1,7 +1,7 @@
 /* PCE early-NPX transcendental numerical approximation. GPL-2.0-or-later.
  * 120-bit software significands, independent of host floating point. This is
  * NOT a reconstruction of Intel microcode or a bit-identical chip oracle.
- * Only normal/zero results are accepted; historical range behavior defers.
+ * F2XM1/FPATAN underflow is handled; other historical range behavior still defers.
  */
 #include "transcendental.h"
 typedef unsigned __int128 wide;
@@ -99,7 +99,7 @@ static int pack(number a,unsigned rc,e87_real80_t *r)
     if(a.e>16383)return 0;
     *r=(e87_real80_t){sig,(a.s<<15)|(a.e+16383)};return 1;
 }
-int e87_transcendental(unsigned mr,e87_real80_t x,e87_real80_t y,unsigned rc,e87_real80_t *r)
+int e87_transcendental(unsigned mr,e87_real80_t x,e87_real80_t y,unsigned rc,unsigned control,e87_real80_t *r,unsigned *status)
 {
     number a=unpack(x),b=unpack(y),v;
     switch(mr){
@@ -109,5 +109,67 @@ int e87_transcendental(unsigned mr,e87_real80_t x,e87_real80_t y,unsigned rc,e87
     case 0xf9:v=mul(b,divide(log1p(a),ln2()));break;
     default:return 0;
     }
-    return pack(v,rc,r);
+    /* F2XM1 and FPATAN explicitly list U/P in the early instruction
+     * tables. Logarithm result ranges remain evidence-gated. */
+    if((mr==0xf0 || mr==0xf3) && v.m && v.e < -16382){
+        if(!(control&0x10)) {
+            /* Early NPX stack response: wrap the exponent by +24576 and
+             * retain the unrounded significand. Intel 387 PRM Appendix C
+             * explicitly distinguishes this from the 387 rounded response.
+             * The significand is still our functional approximation, not
+             * a claim of matching Intel transcendental microcode bits. */
+            int exponent=v.e+24576+16383;
+            if(exponent<1 || exponent>=0x7fff)return 0;
+            *r=(e87_real80_t){(uint64_t)(v.m>>56),(v.s<<15)|(unsigned)exponent};
+            *status=0x10;return 1;
+        }
+        unsigned shift=(unsigned)(-16382-v.e);
+        wide bits=shift>=128?1:(v.m>>shift)|((v.m&(((wide)1<<shift)-1))!=0);
+        uint64_t sig=bits>>56;wide rem=bits&(((wide)1<<56)-1),half=(wide)1<<55;
+        unsigned up=rc==0?(rem>half||(rem==half&&(sig&1))):rc==2&&rem;
+        sig+=up;*r=(e87_real80_t){sig,(sig>>63)?1:0};*status=0x30;return 1;
+    }
+    if(!pack(v,rc,r))return 0;
+    *status=0x20;return 1;
+}
+
+/* Functional CORDIC/Padé ratio, NOT a chip-microcode reconstruction.
+ * Pair scale is explicitly chosen as 3-r*r, 3*r before rotations; matching
+ * Intel's individually observable pair bits/scaling remains unverified.
+ * Constants are mathematical atan(2^-k), truncated to 120 significant bits.
+ */
+int e87_tangent(e87_real80_t angle,unsigned rc,e87_real80_t *numerator,e87_real80_t *denominator)
+{
+    static const number angles[]={
+    {((wide)UINT64_C(0xc90fdaa22168c2)<<64)|UINT64_C(0x34c4c6628b80dc1c),-1,0},
+    {((wide)UINT64_C(0xed63382b0dda7b)<<64)|UINT64_C(0x456fe445ecbc3a8d),-2,0},
+    {((wide)UINT64_C(0xfadbafc96406eb)<<64)|UINT64_C(0x156dc79ef5f7a217),-3,0},
+    {((wide)UINT64_C(0xfeadd4d5617b6e)<<64)|UINT64_C(0x32c897989f3e888e),-4,0},
+    {((wide)UINT64_C(0xffaaddb967ef4e)<<64)|UINT64_C(0x36cb2792dc0e2e0d),-5,0},
+    {((wide)UINT64_C(0xffeaaddd4bb125)<<64)|UINT64_C(0x42779d776dda8c62),-6,0},
+    {((wide)UINT64_C(0xfffaaadddb94d5)<<64)|UINT64_C(0xbbe78c564015f760),-7,0},
+    {((wide)UINT64_C(0xfffeaaadddd4b9)<<64)|UINT64_C(0x68062351fbbe60af),-8,0},
+    {((wide)UINT64_C(0xffffaaaaddddb9)<<64)|UINT64_C(0x4bb12afb6b6d4f7e),-9,0},
+    {((wide)UINT64_C(0xffffeaaaaddddd)<<64)|UINT64_C(0x4b94d5bd56044a39),-10,0},
+    {((wide)UINT64_C(0xfffffaaaaadddd)<<64)|UINT64_C(0xdb94b968067ef3a9),-11,0},
+    {((wide)UINT64_C(0xfffffeaaaaaddd)<<64)|UINT64_C(0xddd4b94bb12b1254),-12,0},
+    {((wide)UINT64_C(0xffffffaaaaaadd)<<64)|UINT64_C(0xddddb94b94d5bd5b),-13,0},
+    {((wide)UINT64_C(0xffffffeaaaaaad)<<64)|UINT64_C(0xdddddd4b94b96806),-14,0},
+    {((wide)UINT64_C(0xfffffffaaaaaaa)<<64)|UINT64_C(0xdddddddb94b94bb1),-15,0},
+    {((wide)UINT64_C(0xfffffffeaaaaaa)<<64)|UINT64_C(0xadddddddd4b94b94),-16,0},
+    };
+    if(!angle.significand || (angle.sign_exponent&0x7fff)<=16383-64){
+        *numerator=angle;*denominator=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff};return 1;
+    }
+    number a=unpack(angle);unsigned decisions=0;
+    for(unsigned k=0;k<16;++k){number b=angles[k];
+        if(a.m && (a.e>b.e || (a.e==b.e&&a.m>=b.m))){a=add(a,negative(b));decisions|=1u<<k;}
+    }
+    number x=add(integer(3),negative(mul(a,a))),y=mul(integer(3),a);
+    for(int k=15;k>=0;--k)if(decisions&(1u<<k)){
+        number dx=x,dy=y;dx.e-=k;dy.e-=k;
+        x=add(x,negative(dy));y=add(y,dx);
+    }
+    e87_real80_t n,d;if(!pack(y,rc,&n)||!pack(x,rc,&d))return 0;
+    *numerator=n;*denominator=d;return 1;
 }

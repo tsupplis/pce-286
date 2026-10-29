@@ -29,6 +29,8 @@ for e in [-16000,-1000,-120,-64,-1]:
 for x in [(2**63+1,16383),(2**64-1,16382),(2**63,16383),(2**63,16384)]:cases.append((0xf1,x,raw(3)))
 rows=[]
 for op,x,y in cases:
+ # Resolve curvature below one output ulp for the tiny explicit inputs.
+ mp.mp.prec=max(600,2*max(0,16383-(x[1]&32767),16383-(y[1]&32767))+256)
  a,b=val(x),val(y)
  z=mp.expm1(a*mp.log(2)) if op==0xf0 else b*mp.log(a,2) if op==0xf1 else mp.atan(b/a) if op==0xf3 else b*mp.log1p(a)/mp.log(2)
  for rc in range(4):
@@ -39,4 +41,4 @@ for op,x,y in cases:
    if s==2**64:s//=2;e+=1
    r=s,(e+16383)|(sign<<15)
   rows.append('{0x%x,%d,%s,%s,%s},'%(op,rc,fmt(x),fmt(y),fmt(r)))
-Path('tests/npx_trans_vectors.h').write_text('/* Generated with mpmath 1.3.0, 180 decimal digits, seed 871287.\n * Mathematical references, not original-chip readbacks. */\nstatic const struct vector {unsigned op,rc;e87_real80_t x,y,result;} vectors[]={\n'+'\n'.join(rows)+'\n};\n')
+Path('tests/npx_trans_vectors.h').write_text('/* Generated with mpmath 1.3.0, at least 600 bits (adaptive for tiny inputs), seed 871287.\n * Mathematical references, not original-chip readbacks. */\nstatic const struct vector {unsigned op,rc;e87_real80_t x,y,result;} vectors[]={\n'+'\n'.join(rows)+'\n};\n')

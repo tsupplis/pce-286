@@ -837,3 +837,16 @@ disk {
 #	# Default: 1 (always sync to host clock or "start" on every boot).
 #	sync_rtc_on_start = 1
 #}
+
+# Optional experimental numeric coprocessor (disabled by default).
+# 8087: only 5150/5160 with an 8086/8088 CPU.
+# 80287: only 5170 with an 80286 CPU; initial CMOS presence is automatic.
+# A saved CMOS file takes precedence; adjust its equipment setting if needed.
+# Errors use XT NMI / AT IRQ13. No coprocessor speed setting or DOS driver.
+# Numeric edge cases and physical timing remain incomplete; see README.md.
+npx {
+    model = "none"
+}
+
+# With npx.model = "80287", timing = 1 (default) enables a partial typical-cycle
+# profile. timing = 0 restores functional pacing. See README for limitations.

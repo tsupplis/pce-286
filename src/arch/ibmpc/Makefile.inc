@@ -36,6 +36,7 @@ $(rel)/%.o: $(rel)/%.c
 # ----------------------------------------------------------------------
 
 PCE_IBMPC_BAS  := \
+	npx \
 	at-keyboard \
 	atari-pc \
 	cmd \
@@ -58,7 +59,17 @@ PCE_IBMPC_MAN1 := $(rel)/pce-ibmpc.1
 PCE_IBMPC_ETC  := $(rel)/pce-ibmpc.cfg
 PCE_IBMPC_BIN  := $(rel)/pce-ibmpc$(EXEEXT)
 
-PCE_IBMPC_OBJ_EXT := \
+NPX_CORE_SRC := $(wildcard $(srcdir)/src/cpu/e8087/*.c) $(wildcard $(srcdir)/src/cpu/e8087/softfloat/*.c)
+NPX_CORE_OBJ := $(patsubst $(srcdir)/%.c,%.o,$(NPX_CORE_SRC))
+NPX_CORE_HDR := $(wildcard $(srcdir)/src/cpu/e8087/*.h) $(wildcard $(srcdir)/src/cpu/e8087/softfloat/*.h)
+DIRS += src/cpu/e8087 src/cpu/e8087/softfloat
+CLN += $(NPX_CORE_OBJ)
+DIST += $(patsubst $(srcdir)/%,%,$(NPX_CORE_SRC) $(NPX_CORE_HDR))
+$(NPX_CORE_OBJ): $(NPX_CORE_HDR) src/cpu/e8086/e8086.h
+src/cpu/e8087/%.o: $(srcdir)/src/cpu/e8087/%.c
+	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -I$(srcdir)/src/cpu/e8087/softfloat -c -o $@ $<
+
+PCE_IBMPC_OBJ_EXT := $(NPX_CORE_OBJ) \
 	src/chipset/clock/mc146818a.o \
 	src/chipset/82xx/e8237.o \
 	src/chipset/82xx/e8250.o \
@@ -148,3 +159,14 @@ $(PCE_IBMPC_OBJ): src/arch/ibmpc/ibmpc.h src/arch/ibmpc/at-keyboard.h
 $(PCE_IBMPC_OBJ): src/devices/wd1003.h
 
 $(PCE_IBMPC_OBJ): src/devices/fdc.h src/chipset/82xx/e8272.h
+
+$(PCE_IBMPC_OBJ): src/arch/ibmpc/npx.h src/cpu/e8087/e8087.h
+
+# The normal IBM PC binary now includes the BSD-licensed SoftFloat subset.
+.PHONY: install-npx-license
+ifeq "$(PCE_BUILD_IBMPC)" "1"
+install: install-npx-license
+install-npx-license:
+	$(INSTALL) -d -m 755 "$(DESTDIR)$(datadir)/licenses/softfloat"
+	$(INSTALL) -m 644 "$(srcdir)/src/cpu/e8087/softfloat/LICENSE.md" "$(DESTDIR)$(datadir)/licenses/softfloat/LICENSE.md"
+endif

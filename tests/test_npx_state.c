@@ -204,6 +204,16 @@ int main(void)
             }
         }
     }
+    for(unsigned model=0;model<2;model++) {
+        const unsigned probes[]={0xe8,0xea,0xeb,0xf1};
+        e87_init(&n,model);n.tags=0x1234;n.status=0x4500;
+        before=n;
+        for(unsigned k=0;k<4;k++) {
+            CHECK(e87_control(&n,0xdb,probes[k],NULL)==(model==E87_80287));
+            CHECK(!memcmp(&n,&before,sizeof n));
+        }
+        CHECK(!e87_control(&n,0xdb,0xef,NULL));
+    }
     before = n;
     CHECK(!e87_init(&n, (e87_model_t)99));
     CHECK(memcmp(&n, &before, sizeof(n)) == 0);
