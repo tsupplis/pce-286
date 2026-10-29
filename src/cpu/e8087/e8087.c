@@ -42,7 +42,9 @@ unsigned e87_tag(const e87_t *n, unsigned logical)
 void e87_fninit(e87_t *n)
 {
     n->control = n->model == E87_8087 ? 0x03ff : 0x037f;
-    n->status = 0;
+    /* Original 8087/287 retain C0..C3 (Intel 387 PRM Appendix C.3).
+     * Construction zeros unspecified initial state; subsequent resets retain it. */
+    n->status &= 0x4700;
     n->transfer_blocked = 0;
     n->wait_error = 0;
     n->tags = 0xffff;
@@ -66,6 +68,7 @@ int e87_init(e87_t *n, e87_model_t model)
 int e87_control(e87_t *n, unsigned opcode, unsigned modrm, uint16_t *ax)
 {
     unsigned top;
+    if (opcode == 0xd9 && modrm == 0xd0) return 1; /* FNOP */
     if (opcode == 0xdb) {
         switch (modrm) {
         case 0xe0: /* FNENI: interrupt mask bit, ignored by 287. */
@@ -127,6 +130,17 @@ static void env_store(const e87_t *n, unsigned char *p)
     env_put(p+12, n->protected_mode ? n->operand_selector :
         ((n->operand_pointer >> 4) & 0xf000));
 }
+/* Control/environment changes reevaluate the live exception request, unlike
+ * arithmetic's sticky error latch. A stored image retains the original state. */
+static void env_errors(e87_t *n)
+{
+    n->status = (n->status & ~0x80u) | (e87_pending_error(n) ? 0x80 : 0);
+    n->wait_error = 0;
+    if (n->model == E87_8087) {
+        n->status &= ~0x8000u;
+        if ((n->status & 0x80) && !(n->control & 0x80)) n->status |= 0x8000;
+    }
+}
 static void env_load(e87_t *n, const unsigned char *p)
 {
     n->control = env_word(p); n->status = env_word(p+2); n->tags = env_word(p+4);
@@ -140,17 +154,16 @@ static void env_load(e87_t *n, const unsigned char *p)
         n->opcode = env_word(p+8) & 0x7ff;
     }
     /* React to restored exception flags and masks at the next CPU boundary. */
-    n->status = (n->status & ~0x80u) | (e87_pending_error(n) ? 0x80 : 0);
-    n->wait_error = 0;
+    env_errors(n);
 }
 unsigned e87_memory_control(e87_t *n, unsigned op, unsigned mr,
                             int query, unsigned char *p)
 {
     unsigned f = (mr >> 3) & 7, size = 0, i, j, k;
-    if (n->model != E87_80287 || mr >= 0xc0) return 0;
+    if (mr >= 0xc0) return 0;
     if (op == 0xd9 && (f == 5 || f == 7)) size = 2;
     if (op == 0xdd && f == 7) size = 2;
-    if (op == 0xd9 && f == 4) size = 14;
+    if (op == 0xd9 && (f == 4 || f == 6)) size = 14;
     if (op == 0xdd && (f == 4 || f == 6)) size = 94;
     if (!size || query) return size;
     if (!p || n->transfer_blocked) return 0;
@@ -159,7 +172,7 @@ unsigned e87_memory_control(e87_t *n, unsigned op, unsigned mr,
     if (size == 2) {
         if (f == 5) {
             n->control = env_word(p);
-            n->status = (n->status & ~0x80u) | (e87_pending_error(n) ? 0x80 : 0);
+            env_errors(n);
         } else env_put(p, op == 0xd9 ? n->control : n->status);
     } else if (f == 4) {
         env_load(n, p);
@@ -172,6 +185,13 @@ unsigned e87_memory_control(e87_t *n, unsigned op, unsigned mr,
         }
     } else {
         env_store(n, p);
+        if (size == 14) {
+            /* Intel Numerics Supplement S-41: mask six errors, preserve IEM
+             * and stack, release the error request before a subsequent WAIT. */
+            n->control |= 0x3f;
+            env_errors(n);
+            return size;
+        }
         for (i = 0; i < 8; ++i) {
             k = e87_index(n, i);
             for (j = 0; j < 8; ++j)

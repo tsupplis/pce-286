@@ -46,12 +46,123 @@ static void protected_setup(e8086_t *c)
     }
     c->msw|=1;
 }
+static void guest_subtraction(void)
+{
+    const unsigned ops[]={0xd8,0xdc,0xde};
+    for(unsigned model=0;model<2;++model) for(unsigned f=0;f<3;++f)
+    for(unsigned reverse=0;reverse<2;++reverse) {
+        e8086_t *c=cpu(model);e87_t n;e87_init(&n,model);
+        n.tags=0xfff0;
+        n.reg[0]=(e87_real80_t){UINT64_C(0xc000000000000000),0x4000};
+        n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff};
+        e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_event(c,e87_cpu_event);
+        e86_set_npx_address(c,e87_cpu_address);
+        unsigned mr=reverse?0xe9:0xe1;
+        step(c,ops[f],mr);
+        CHECK(c->ip==0x102 && n.reg[f?1:0].sign_exponent==(reverse?0xc000:0x4000));
+        CHECK(n.reg[f?1:0].significand==UINT64_C(0x8000000000000000));
+        CHECK(e87_top(&n)==(f==2));
+        CHECK(n.instruction_pointer==0x100 && n.opcode==(((ops[f]&7)<<8)|mr));
+        e86_del(c);
+    }
+}
+static void guest_nop(void)
+{
+    for(unsigned model=0;model<2;++model) {
+        e8086_t *c=cpu(model);e87_t n,before;e87_init(&n,model);
+        e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_event(c,e87_cpu_event);
+        e86_set_npx_address(c,e87_cpu_address);
+        n.status=0x4500;n.tags=0x1234;n.instruction_pointer=0xabcde;n.operand_pointer=0x12345;
+        before=n;step(c,0xd9,0xd0);
+        CHECK(c->ip==0x102 && !memcmp(&n,&before,sizeof n));
+        n.control&=~1u;e87_raise_exception(&n,1);before=n;w16(0,16*4,0x500);
+        step(c,0xd9,0xd0);
+        CHECK(c->ip==(model?0x500:0x104));
+        CHECK(!memcmp(&n,&before,sizeof n));
+        e86_del(c);
+    }
+}
+static void pointer_capture(void)
+{
+    for(unsigned late=0;late<2;++late) {
+        e8086_t *c=cpu(1);e87_t n;
+        e87_init(&n,E87_80287);protected_setup(c);n.protected_mode=1;
+        n.instruction_pointer=0x1234;n.operand_pointer=0x5678;n.opcode=0x321;
+        n.instruction_selector=8;n.operand_selector=24;
+        e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_memory(c,e87_cpu_memory);
+        e86_set_npx_event(c,e87_cpu_event);e86_set_npx_address(c,e87_cpu_address);
+        c->seg_limit[E86_REG_DS]=late?0x608:0x600;e86_set_bx(c,0x600);
+        step(c,0xdb,0x2f);
+        CHECK(c->ip==0x500 && n.transfer_blocked==late);
+        CHECK(n.instruction_pointer==0x1234 && n.operand_pointer==0x5678);
+        CHECK(n.opcode==0x321 && n.instruction_selector==8 && n.operand_selector==24);
+        e86_del(c);
+    }
+    for(unsigned kind=0;kind<3;++kind) {
+        e8086_t *c=cpu(kind!=0); e87_t n;
+        e87_init(&n,kind ? E87_80287 : E87_8087);
+        if(kind==2) { protected_setup(c); n.protected_mode=1; }
+        e86_set_es(c,0xa020);
+        /* Explicit cached base avoids selector lookup and tests segment override. */
+        if(kind) { c->seg_base[E86_REG_ES]=0xa0200; c->seg_ar[E86_REG_ES]=0x93; }
+        e86_set_bx(c,0x600);
+        e86_set_npx_control(c,&n,e87_cpu_control);e86_set_npx_memory(c,e87_cpu_memory);
+        e86_set_npx_event(c,e87_cpu_event);e86_set_npx_address(c,e87_cpu_address);
+        ram[0x807]=0x80;ram[0x808]=0xff;ram[0x809]=0x3f;
+        ram[0x101]=0xdb;ram[0x102]=0x2f;
+        step(c,0x26,0xdb); /* ES: FLD tword [BX] */
+        CHECK(c->ip==0x103);
+        CHECK(n.instruction_pointer==(kind?0x100:0x101));
+        CHECK(n.operand_pointer==(kind==2?0x600:0xa0800));
+        CHECK(n.opcode==0x32f);
+        if(kind==2) CHECK(n.instruction_selector==8 && n.operand_selector==0xa020);
+        step(c,0xd8,0xc0);
+        CHECK(n.instruction_pointer==0x103 && n.opcode==0xc0);
+        CHECK(n.operand_pointer==(kind==2?0x600:0xa0800));
+        if(kind) {
+            unsigned char image[94]; e87_t copy=n;
+            CHECK(e87_memory_control(&copy,0xdd,0x30,0,image)==94);
+            e86_set_bx(c,0x900);step(c,0xdd,0x37);
+            CHECK(!memcmp(ram+0x900,image,94));
+            CHECK(n.instruction_pointer==0); /* FNSAVE reset not overwritten */
+        }
+        e86_reset(c);CHECK(c->npx_address==e87_cpu_address);
+        e86_set_npx_control(c,0,0);CHECK(c->npx_address==0);
+        e86_del(c);
+    }
+}
+static void guest_environment(void)
+{
+    const unsigned ops[]={0xd9,0xd9,0xdd,0xd9,0xdd,0xdd,0xd9};
+    const unsigned forms[]={5,7,7,4,4,6,6}, sizes[]={2,2,2,14,94,94,14};
+    for(unsigned model=0;model<2;++model) for(unsigned k=0;k<7;++k) {
+        e8086_t *c=cpu(model);e87_t n,expected,source;unsigned char image[94], want[94];
+        e87_init(&source,model);source.tags=0x1234;source.status=0x2800;
+        source.reg[5]=(e87_real80_t){UINT64_C(0x8765432101234567),0x4001};
+        CHECK(e87_memory_control(&source,0xdd,0x30,0,image)==94);
+        e87_init(&n,model);n.tags=0xfffc;n.reg[0].significand=123;
+        if(forms[k]>=6) { n.control&=~0x81u;e87_raise_exception(&n,1); }
+        expected=n;memcpy(want,image,94);
+        CHECK(e87_memory_control(&expected,ops[k],forms[k]<<3,0,want)==sizes[k]);
+        memcpy(ram+0x600,image,94);ram[0x5ff]=0xa5;ram[0x600+sizes[k]]=0xa5;
+        e86_set_bx(c,0x600);e86_set_npx_control(c,&n,e87_cpu_control);
+        e86_set_npx_memory(c,e87_cpu_memory);e86_set_npx_event(c,e87_cpu_event);
+        e86_set_npx_address(c,e87_cpu_address);
+        step(c,ops[k],(forms[k]<<3)|7);
+        CHECK(c->ip==0x102 && !(c->state&E86_STATE_NPX_STOP));
+        CHECK(!memcmp(&n,&expected,sizeof n));
+        CHECK(!memcmp(ram+0x600,forms[k]>=6?want:image,sizes[k]));
+        CHECK(ram[0x5ff]==0xa5 && ram[0x600+sizes[k]]==0xa5);
+        if(k==6) { step(c,0x9b,0x90); CHECK(c->ip==0x103); }
+        e86_del(c);
+    }
+}
 /* Exercise each staged control through actual ESC decoding, including edges. */
 static void memory_controls(void)
 {
-    const unsigned ops[]={0xd9,0xd9,0xdd,0xd9,0xdd,0xdd};
-    const unsigned forms[]={5,7,7,4,4,6}, sizes[]={2,2,2,14,94,94};
-    for(unsigned k=0;k<6;++k) for(unsigned edge=0;edge<3;++edge) {
+    const unsigned ops[]={0xd9,0xd9,0xdd,0xd9,0xdd,0xdd,0xd9};
+    const unsigned forms[]={5,7,7,4,4,6,6}, sizes[]={2,2,2,14,94,94,14};
+    for(unsigned k=0;k<7;++k) for(unsigned edge=0;edge<3;++edge) {
         e8086_t *c=cpu(1); e87_t n,before; unsigned char image[94];
         e87_init(&n,E87_80287); n.status=0x1800; n.tags=0x1234;
         n.reg[3]=(e87_real80_t){UINT64_C(0x8123456789abcdef),0x4000};
@@ -162,6 +273,10 @@ static void pending_287(void)
 }
 int main(void)
 {
+    guest_subtraction();
+    guest_nop();
+    guest_environment();
+    pointer_capture();
     memory_controls();
     unsigned model, kind;
     precision_wait();

@@ -51,6 +51,7 @@ void e86_init (e8086_t *c)
 	c->npx_control = NULL;
 	c->npx_memory = NULL;
     c->npx_event = NULL;
+    c->npx_address = NULL;
 
 	c->mem = NULL;
 	c->mem_get_uint8 = e86_get_mem_uint8;
@@ -135,6 +136,7 @@ void e86_set_npx_control(e8086_t *c, void *ext, e86_npx_control_f control)
     c->npx_control = control;
     c->npx_memory = NULL;
     c->npx_event = NULL;
+    c->npx_address = NULL;
 }
 
 void e86_set_npx_memory(e8086_t *c, e86_npx_memory_f memory)
@@ -145,6 +147,11 @@ void e86_set_npx_memory(e8086_t *c, e86_npx_memory_f memory)
 void e86_set_npx_event(e8086_t *c, e86_npx_event_f event)
 {
     c->npx_event = c->npx_control ? event : NULL;
+}
+
+void e86_set_npx_address(e8086_t *c, e86_npx_address_f address)
+{
+    c->npx_address = c->npx_control ? address : NULL;
 }
 
 void e86_free (e8086_t *c)

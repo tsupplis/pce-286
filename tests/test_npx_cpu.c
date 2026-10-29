@@ -42,7 +42,7 @@ int main(void)
         e86_set_npx_control(c,&n,control);
         n.tags=0;n.status=0x1234;
         step(c,0xdb,0xe3);
-        CHECK(n.status==0 && n.tags==0xffff && c->ip==0x102);
+        CHECK(n.status==0x200 && n.tags==0xffff && c->ip==0x102);
         if(model) {
             step(c,0xdb,0xe4);CHECK(n.protected_mode);
             step(c,0xdb,0xe3);CHECK(n.protected_mode);

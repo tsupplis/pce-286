@@ -13,6 +13,68 @@ static void rejected(e87_t *n, unsigned op, unsigned mr, unsigned char *in)
     CHECK(!memcmp(n, &before, sizeof(*n)));
     CHECK(!memcmp(out, sentinel, 10));
 }
+static void subtraction_checks(void)
+{
+    const unsigned ops[]={0xd8,0xdc,0xde}, pcs[]={0,0x200,0x300};
+    for(unsigned model=0;model<2;++model) for(unsigned form=0;form<3;++form)
+    for(unsigned reverse=0;reverse<2;++reverse) for(unsigned sign=0;sign<2;++sign)
+    for(unsigned initial=0;initial<8;++initial) for(unsigned pc=0;pc<3;++pc)
+    for(unsigned rc=0;rc<4;++rc) {
+        e87_t n; e87_init(&n,model);n.status=initial<<11;
+        n.control=(n.control&~0xf00)|pcs[pc]|(rc<<10);
+        unsigned a=initial,b=(a+1)&7,dest=form?b:a;
+        n.tags=0xffff&~((3u<<(2*a))|(3u<<(2*b)));
+        n.reg[a]=(e87_real80_t){UINT64_C(0xc000000000000000),0x4000|(sign<<15)}; /* +/-3 */
+        n.reg[b]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff|(sign<<15)}; /* +/-1 */
+        CHECK(e87_numeric(&n,ops[form],(reverse?0xe8:0xe0)|1,0,0));
+        CHECK(n.reg[dest].significand==UINT64_C(0x8000000000000000));
+        CHECK(n.reg[dest].sign_exponent==(0x4000|((sign^reverse)<<15)));
+        CHECK(e87_top(&n)==((initial+(form==2))&7));
+        CHECK(!(n.status&0xbf));
+        CHECK(((n.tags>>(2*dest))&3)==0);
+        if(form==2) CHECK(((n.tags>>(2*a))&3)==3);
+    }
+    for(unsigned model=0;model<2;++model) for(unsigned rev=0;rev<2;++rev)
+    for(unsigned rc=0;rc<4;++rc) {
+        e87_t n;e87_init(&n,model);n.tags=0xfffc;n.control=(n.control&~0xc00)|(rc<<10);
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff};
+        CHECK(e87_numeric(&n,0xd8,rev?0xe8:0xe0,0,0));
+        CHECK(n.reg[0].significand==0 && n.reg[0].sign_exponent==(rc==1?0x8000:0));
+        CHECK(e87_tag(&n,0)==1);
+    }
+    for(unsigned model=0;model<2;++model) for(unsigned rev=0;rev<2;++rev)
+    for(unsigned mask=0;mask<2;++mask) {
+        e87_t n,before;e87_init(&n,model);n.control=(n.control&~1u)|mask|0x1000;n.tags=0xfffa;
+        n.reg[0]=n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x7fff};before=n;
+        CHECK(e87_numeric(&n,0xd8,rev?0xe9:0xe1,0,0));
+        CHECK((n.status&0x81)==(mask?1:0x81));
+        if(!mask) CHECK(!memcmp(n.reg,before.reg,sizeof n.reg));
+        else CHECK(n.reg[0].sign_exponent==0xffff && n.reg[0].significand==UINT64_C(0xc000000000000000));
+        e87_fninit(&n);n.tags=0xfff2;
+        n.reg[0]=(e87_real80_t){UINT64_C(0xc123456789abcdef),0xffff};
+        n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff};before=n;
+        CHECK(e87_numeric(&n,0xd8,rev?0xe9:0xe1,0,0));
+        CHECK(n.reg[0].sign_exponent==before.reg[0].sign_exponent && n.reg[0].significand==before.reg[0].significand);
+    }
+}
+static void subtraction_rounding(void)
+{
+    const unsigned widths[]={24,53,64}, pcs[]={0,0x200,0x300};
+    for(unsigned model=0;model<2;++model) for(unsigned p=0;p<3;++p)
+    for(unsigned rc=0;rc<4;++rc) for(unsigned reverse=0;reverse<2;++reverse)
+    for(unsigned masked=0;masked<2;++masked) {
+        e87_t n;e87_init(&n,model);n.tags=0xfff0;
+        n.control=(n.control&~0xf20u)|pcs[p]|(rc<<10)|(masked?0x20:0);
+        n.reg[0]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff};
+        n.reg[1]=(e87_real80_t){UINT64_C(0x8000000000000000),0x3fff-widths[p]-1};
+        CHECK(e87_numeric(&n,0xd8,reverse?0xe9:0xe1,0,0));
+        unsigned up=rc==0 || rc==(reverse?1:2);
+        CHECK(n.reg[0].significand==(up?UINT64_C(0x8000000000000000):UINT64_MAX<<(64-widths[p])));
+        CHECK(n.reg[0].sign_exponent==((up?0x3fff:0x3ffe)|(reverse<<15)));
+        CHECK((n.status&0xa0)==(masked?0x20:0xa0));
+        CHECK(!!(n.status&0x200)==up);
+    }
+}
 static void precision_checks(void)
 {
     const unsigned widths[3]={24,53,64}, pc[3]={0,2,3}, ops[3]={0xd8,0xdc,0xde};
@@ -583,6 +645,8 @@ int main(void)
         if(model==E87_8087) n.control &= ~0x80u;
         rejected(&n, 0xd8, 0xc0, 0);
     }
+    subtraction_rounding();
+    subtraction_checks();
     pending_disabled_checks();
     pseudo_denormal_checks();
     nan_transfer_checks();

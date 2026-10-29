@@ -128,6 +128,13 @@ typedef int (*e86_npx_memory_f)(void *, unsigned, unsigned, int, unsigned char *
  * FNINIT is delivered through control as usual. */
 enum { E86_NPX_BUSY, E86_NPX_OVERRUN, E86_NPX_WAIT, E86_NPX_ERROR };
 typedef int (*e86_npx_event_f)(void *, unsigned);
+/* Successful ESC metadata; callback decides which numeric forms track pointers.
+ * ip includes prefixes, esc_ip does not; linear addresses precede bus masking. */
+typedef struct e86_npx_address {
+    unsigned op, mr, ip, esc_ip, cs, memory, offset, selector;
+    unsigned long linear_ip, linear_esc, linear_operand;
+} e86_npx_address_t;
+typedef void (*e86_npx_address_f)(void *, const e86_npx_address_t *);
 
 typedef struct e8086_t {
 	/* Registers remain authoritative here; engine is synchronized per step. */
@@ -138,6 +145,7 @@ typedef struct e8086_t {
 	e86_npx_control_f npx_control;
 	e86_npx_memory_f npx_memory;
 	e86_npx_event_f npx_event;
+    e86_npx_address_f npx_address;
 
 	unsigned short   dreg[8];
 	unsigned short   sreg[4];
@@ -545,6 +553,7 @@ void e86_set_npx_control(e8086_t *c, void *ext, e86_npx_control_f control);
 /* Set after control attachment. Replacing/detaching control clears memory. */
 void e86_set_npx_memory(e8086_t *c, e86_npx_memory_f memory);
 void e86_set_npx_event(e8086_t *c, e86_npx_event_f event);
+void e86_set_npx_address(e8086_t *c, e86_npx_address_f address);
 
 e8086_t *e86_new (void);
 void e86_del (e8086_t *c);

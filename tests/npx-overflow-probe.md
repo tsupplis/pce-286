@@ -9,8 +9,10 @@ real-mode DOS on an 8087 or 80287 machine and run `NPXOVF`. A coprocessor must b
 present. It writes/overwrites **NPXOVF.BIN in the current DOS directory**, resets
 the NPX state, and leaves it initialized. It does not access raw disks. Do not run
 this on a machine without an NPX or inside an environment that traps CLI.
-The current experimental PCE NPX lacks the control/memory forms used by this
-probe; running it there is not yet an acceptance test.
+The experimental PCE NPX now implements the required memory controls in its
+optional test interface, but has no normal guest configuration option and still
+rejects the unresolved overflow cases. Running this probe there is not hardware
+characterization or an acceptance test.
 
 Decode a captured file with:
 

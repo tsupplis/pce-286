@@ -4403,6 +4403,20 @@ unsigned op_d8 (e8086_t *c)
         }
         e86_get_ea_ptr(c, c->pq + 1);
     }
+    if (c->npx_address) {
+        e86_npx_address_t a = {0};
+        a.op=op; a.mr=mr; a.ip=c->cur_ip; a.esc_ip=c->ip;
+        a.cs=c->sreg[E86_REG_CS];
+        a.linear_ip=e86_sreg_to_linear(c,E86_REG_CS,c->cur_ip);
+        a.linear_esc=e86_sreg_to_linear(c,E86_REG_CS,c->ip);
+        a.memory=mr<0xc0;
+        if (a.memory) {
+            unsigned reg=e86_ea_seg_reg(c);
+            a.offset=c->ea.ofs; a.selector=c->sreg[reg];
+            a.linear_operand=e86_sreg_to_linear(c,reg,c->ea.ofs);
+        }
+        c->npx_address(c->npx_ext,&a);
+    }
 	e86_set_clk (c, 2);
 
 	return (1 + c->ea.cnt);

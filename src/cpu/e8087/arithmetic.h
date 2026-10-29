@@ -18,4 +18,10 @@ int e87_add80_unnormal(e87_real80_t a, e87_real80_t b, unsigned precision,
  * backend flags. Returns 0 without mutation for non-range/unsupported cases. */
 int e87_add80_range(e87_real80_t a, e87_real80_t b, unsigned precision,
                    unsigned rounding, unsigned control, e87_real80_t *result, unsigned *status);
+/* Canonical finite normal/zero operands only, normal/zero results only.
+ * Unsupported exceptional/range cases return zero without output mutation. */
+int e87_mul80(e87_real80_t a, e87_real80_t b, unsigned precision,
+             unsigned rounding, e87_real80_t *result, unsigned *flags);
+int e87_div80(e87_real80_t a, e87_real80_t b, unsigned precision,
+             unsigned rounding, e87_real80_t *result, unsigned *flags);
 #endif

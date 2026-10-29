@@ -148,3 +148,48 @@ int e87_add80_range(e87_real80_t a,e87_real80_t b,unsigned precision,
 {
     return add_early(a,b,precision,rounding,result,status,1,control);
 }
+
+/* Exact integer product or quotient/remainder, rounded once at selected PC.
+ * Early NPX exceptional results are deliberately outside this finite adapter. */
+static int product80(e87_real80_t a,e87_real80_t b,unsigned precision,
+                     unsigned rounding,e87_real80_t *result,unsigned *flags,int divide)
+{
+    unsigned ea=a.sign_exponent&0x7fff, eb=b.sign_exponent&0x7fff;
+    unsigned sign=(a.sign_exponent^b.sign_exponent)&0x8000;
+    unsigned width=precision==32?24:precision==64?53:64, shift;
+    e87_wide_t q, rem, denominator, product;
+    int exponent;
+    if(!result || !flags || (precision!=32 && precision!=64 && precision!=80) || rounding>3) return 0;
+    if((ea==0 ? a.significand!=0 : ea==0x7fff || !(a.significand>>63)) ||
+       (eb==0 ? b.significand!=0 : eb==0x7fff || !(b.significand>>63))) return 0;
+    if(divide && !b.significand) return 0;
+    if(!a.significand || (!divide && !b.significand)) {
+        *result=(e87_real80_t){0,sign};*flags=0;return 1;
+    }
+    if(divide) {
+        unsigned smaller=a.significand<b.significand;
+        exponent=(int)ea-(int)eb+0x3fff-smaller;
+        product=(e87_wide_t)a.significand<<(width-1+smaller);
+        denominator=b.significand;q=product/denominator;rem=product%denominator;
+    } else {
+        product=(e87_wide_t)a.significand*b.significand;
+        unsigned carry=(unsigned)(product>>127);
+        exponent=(int)ea+(int)eb-0x3fff+carry;
+        shift=127+carry-width;denominator=(e87_wide_t)1<<shift;
+        q=product>>shift;rem=product&(denominator-1);
+    }
+    if(exponent<=0 || exponent>=0x7fff) return 0;
+    unsigned increment=rem && ((rounding==0 &&
+        (rem>denominator/2 || (rem*2==denominator && (q&1)))) ||
+        (rounding==2 && sign) || (rounding==3 && !sign));
+    q+=increment;
+    if(q==((e87_wide_t)1<<width)) {q>>=1;++exponent;}
+    if(exponent>=0x7fff) return 0;
+    *result=(e87_real80_t){(uint64_t)q<<(64-width),sign|exponent};
+    *flags=rem?E87_ARITH_INEXACT:0;
+    return 1;
+}
+int e87_mul80(e87_real80_t a,e87_real80_t b,unsigned p,unsigned r,e87_real80_t *v,unsigned *f)
+{ return product80(a,b,p,r,v,f,0); }
+int e87_div80(e87_real80_t a,e87_real80_t b,unsigned p,unsigned r,e87_real80_t *v,unsigned *f)
+{ return product80(a,b,p,r,v,f,1); }

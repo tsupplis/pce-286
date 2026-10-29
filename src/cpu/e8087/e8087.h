@@ -17,7 +17,8 @@ typedef struct {
 } e87_t;
 
 /* Construction initializes unspecified physical register contents for repeatability.
- * FNINIT and hardware reset invalidate tags, without clearing register payloads.
+ * FNINIT and hardware reset invalidate tags, without clearing register payloads
+ * or C0..C3. Construction initializes those unspecified power-on bits to zero.
  * Mode changes only on hardware reset or 287 FSETPM. */
 int e87_init(e87_t *n, e87_model_t model);
 void e87_reset(e87_t *n);
@@ -40,11 +41,10 @@ unsigned e87_tag(const e87_t *n, unsigned logical);
  * not-handled leaves all state/output untouched, and is not a guest #UD verdict.
  * Optional AX output is required for 287 DF E0. CPU attachment is optional; board signaling is not implemented yet. */
 int e87_control(e87_t *n, unsigned opcode, unsigned modrm, uint16_t *ax);
-/* Staged 287 memory controls. Returns required bytes (2/14/94), or zero.
+/* Staged 8087/287 memory controls. Returns required bytes (2/14/94), or zero.
  * query is side-effect free; caller must validate the entire operand before
- * execution and commit stores. CPU adapter is available; automatic address
- * tracking is not yet implemented.
- * FNSTENV remains unsupported pending resolution of conflicting early manuals. */
+ * execution and commit stores. CPU memory and address adapters are available in execute.h.
+ * FNSTENV stores the original environment, then masks numeric exceptions. */
 unsigned e87_memory_control(e87_t *n, unsigned op, unsigned mr,
                             int query, unsigned char *bytes);
 #endif

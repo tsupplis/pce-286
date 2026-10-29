@@ -63,7 +63,7 @@ static void invalid_result(e87_t *n, unsigned dest, unsigned new_top)
 int e87_numeric(e87_t *n, unsigned op, unsigned mr,
                 const unsigned char *input, unsigned char *output)
 {
-    e87_real80_t x, r, truncated;
+    e87_real80_t x, y, r, truncated;
     unsigned t = e87_top(n), i, dest, flags, pc, rc, truncate_flags, rounded_up = 0;
     static const unsigned precisions[4] = {32, 0, 64, 80};
     static const unsigned rounding[4] = {0, 2, 3, 1};
@@ -109,7 +109,7 @@ int e87_numeric(e87_t *n, unsigned op, unsigned mr,
         top(n, t+1);
         return 1;
     }
-    if ((op != 0xd8 && op != 0xdc && op != 0xde) || mr < 0xc0 || mr > 0xc7)
+    if ((op != 0xd8 && op != 0xdc && op != 0xde) || !((mr >= 0xc0 && mr <= 0xcf) || mr >= 0xe0))
         return 0;
     i = e87_index(n, mr & 7);
     if (e87_tag(n, 0) == 3 || e87_tag(n, mr & 7) == 3) {
@@ -120,6 +120,24 @@ int e87_numeric(e87_t *n, unsigned op, unsigned mr,
             if (op == 0xde) tag(n, t, 3);
         }
         return action != 0;
+    }
+    if ((mr&0xf8)==0xc8 || mr>=0xf0) {
+        int (*calc)(e87_real80_t,e87_real80_t,unsigned,unsigned,e87_real80_t *,unsigned *) =
+            mr>=0xf0 ? e87_div80 : e87_mul80;
+        x=n->reg[t];y=n->reg[i];
+        /* F0 is ST0/STi, F8 is STi/ST0, independent of destination. */
+        if(mr>=0xf8) {x=n->reg[i];y=n->reg[t];}
+        pc=precisions[(n->control>>8)&3];rc=rounding[(n->control>>10)&3];
+        if(!finite(x) || !finite(y) || e87_tag(n,0)==2 || e87_tag(n,mr&7)==2) return 0;
+        if(!calc(x,y,pc,rc,&r,&flags) || !calc(x,y,pc,1,&truncated,&truncate_flags)) return 0;
+        rounded_up=((r.sign_exponent&0x7fff)>(truncated.sign_exponent&0x7fff)) ||
+            ((r.sign_exponent&0x7fff)==(truncated.sign_exponent&0x7fff) && r.significand>truncated.significand);
+        dest=op==0xd8?t:i;n->reg[dest]=r;tag(n,dest,r.significand?0:1);
+        top(n,t);
+        if(op==0xde) {tag(n,t,3);top(n,t+1);}
+        if(rounded_up) n->status|=0x200;
+        if(flags&E87_ARITH_INEXACT) e87_raise_exception(n,0x20);
+        return 1;
     }
     /* Stack invalid takes priority; denormal precedes non-stack invalid.
      * Validate raw/tag combinations before committing any sticky exception. */
@@ -149,6 +167,11 @@ int e87_numeric(e87_t *n, unsigned op, unsigned mr,
         if (op == 0xde) { tag(n, t, 3); top(n, t+1); n->status |= c1; }
         return 1;
     }
+    /* Negate only after NaN propagation: subtraction must not alter its payload
+     * sign. E0 uses ST0-STi; E8 uses STi-ST0, irrespective of destination. */
+    x=n->reg[t]; y=n->reg[i];
+    if ((mr & 0xf8)==0xe0) y.sign_exponent ^= 0x8000;
+    if ((mr & 0xf8)==0xe8) x.sign_exponent ^= 0x8000;
     if (((e87_tag(n, 0) == 2 && infinity80(n->reg[t])) ||
          (e87_tag(n, mr & 7) == 2 && infinity80(n->reg[i])))) {
         int a_inf = e87_tag(n, 0) == 2 && infinity80(n->reg[t]);
@@ -158,12 +181,12 @@ int e87_numeric(e87_t *n, unsigned op, unsigned mr,
         /* Early-NPX projective addition rejects ANY two infinities. Affine addition
          * rejects opposite signs only (Intel PRM table 1-12). */
         if (a_inf && b_inf && (!(n->control & 0x1000) ||
-            ((n->reg[t].sign_exponent ^ n->reg[i].sign_exponent) & 0x8000))) {
+            ((x.sign_exponent ^ y.sign_exponent) & 0x8000))) {
             e87_raise_exception(n,1);
             if (!(n->control & 1)) return 1;
             invalid_result(n, dest, op == 0xde ? t+1 : t);
         } else {
-            n->reg[dest] = a_inf ? n->reg[t] : n->reg[i];
+            n->reg[dest] = a_inf ? x : y;
             tag(n, dest, 2); top(n, op == 0xde ? t+1 : t);
         }
         if (op == 0xde) tag(n, t, 3);
@@ -173,7 +196,7 @@ int e87_numeric(e87_t *n, unsigned op, unsigned mr,
                          denormal80(n->reg[i]) || unnormal80(n->reg[i]);
     pc = precisions[(n->control >> 8) & 3];
     rc = rounding[(n->control >> 10) & 3];
-    if (e87_add80_range(n->reg[t],n->reg[i],pc,rc,n->control,&r,&flags)) {
+    if (e87_add80_range(x,y,pc,rc,n->control,&r,&flags)) {
         e87_raise_exception(n, (flags & 0x3f) | (denormal ? 2 : 0));
         dest = op == 0xd8 ? t : i;
         n->reg[dest] = r;
@@ -185,10 +208,10 @@ int e87_numeric(e87_t *n, unsigned op, unsigned mr,
     }
     int (*add)(e87_real80_t,e87_real80_t,unsigned,unsigned,e87_real80_t *,unsigned *) =
         nonnormal ? e87_add80_unnormal : e87_add80;
-    if (!add(n->reg[t], n->reg[i], pc, rc, &r, &flags) ||
+    if (!add(x, y, pc, rc, &r, &flags) ||
         (flags & ~E87_ARITH_INEXACT) || (!finite(r) && !unnormal80(r))) return 0;
     if (flags & E87_ARITH_INEXACT) {
-        if (!add(n->reg[t], n->reg[i], pc, 1, &truncated, &truncate_flags))
+        if (!add(x, y, pc, 1, &truncated, &truncate_flags))
             return 0;
         /* C1 denotes a significand increment (magnitude), including negatives.
          * Compare against truncation at the SAME precision, avoiding double
@@ -211,6 +234,10 @@ int e87_numeric(e87_t *n, unsigned op, unsigned mr,
 
 int e87_cpu_control(void *n, unsigned op, unsigned mr, unsigned short *ax)
 {
+    if (op == 0xd9 && mr == 0xd0) {
+        e87_t *state = n;
+        if (state->transfer_blocked || e87_error_signal(state)) return 0;
+    }
     return e87_control(n, op, mr, ax) || e87_numeric(n, op, mr, 0, 0);
 }
 int e87_cpu_memory(void *n, unsigned op, unsigned mr, int query, unsigned char *bytes)
@@ -237,4 +264,23 @@ int e87_cpu_event(void *opaque, unsigned event)
         return 1;
     }
     return 0;
+}
+
+void e87_cpu_address(void *opaque, const struct e86_npx_address *a)
+{
+    e87_t *n=opaque;
+    /* Only implemented numeric forms update exception pointers. Controls,
+     * including save/restore and stack control operations, preserve them. */
+    if (!((a->op==0xdb && a->memory &&
+           (((a->mr>>3)&7)==5 || ((a->mr>>3)&7)==7)) ||
+          ((a->op==0xd8 || a->op==0xdc || a->op==0xde) &&
+           ((a->mr>=0xc0 && a->mr<=0xcf) || a->mr>=0xe0)))) return;
+    n->opcode=((a->op&7)<<8)|a->mr;
+    if(n->protected_mode && n->model==E87_80287) {
+        n->instruction_pointer=a->ip; n->instruction_selector=a->cs;
+        if(a->memory) { n->operand_pointer=a->offset; n->operand_selector=a->selector; }
+    } else {
+        n->instruction_pointer=(n->model==E87_8087 ? a->linear_esc : a->linear_ip)&0xfffff;
+        if(a->memory) n->operand_pointer=a->linear_operand&0xfffff;
+    }
 }
