@@ -94,3 +94,13 @@ tests/test_port92
 /tests/test_8080_audit
 /tests/test_nec_8080
 !images/dos.img
+# NPX regression executables
+/tests/test_npx_format
+/tests/test_npx_state
+/tests/test_npx_cpu
+
+/tests/test_npx_arithmetic
+/tests/test_npx_execute
+/tests/test_npx_memory
+
+/tests/npxovf.com

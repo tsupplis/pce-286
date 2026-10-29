@@ -47,6 +47,10 @@ void e86_init (e8086_t *c)
 	e86_nec_init (c);
 
 	c->cpu = E86_CPU_REP_BUG;
+	c->npx_ext = NULL;
+	c->npx_control = NULL;
+	c->npx_memory = NULL;
+    c->npx_event = NULL;
 
 	c->mem = NULL;
 	c->mem_get_uint8 = e86_get_mem_uint8;
@@ -125,8 +129,27 @@ void e86_init (e8086_t *c)
 	}
 }
 
+void e86_set_npx_control(e8086_t *c, void *ext, e86_npx_control_f control)
+{
+    c->npx_ext = control ? ext : NULL;
+    c->npx_control = control;
+    c->npx_memory = NULL;
+    c->npx_event = NULL;
+}
+
+void e86_set_npx_memory(e8086_t *c, e86_npx_memory_f memory)
+{
+    c->npx_memory = c->npx_control ? memory : NULL;
+}
+
+void e86_set_npx_event(e8086_t *c, e86_npx_event_f event)
+{
+    c->npx_event = c->npx_control ? event : NULL;
+}
+
 void e86_free (e8086_t *c)
 {
+    e86_set_npx_control(c, NULL, NULL);
 }
 
 e8086_t *e86_new (void)
@@ -383,7 +406,7 @@ void e86_trap (e8086_t *c, unsigned n)
 {
 	unsigned short ip;
 
-	if (c->state & E86_STATE_SHUTDOWN) {
+	if (c->state & (E86_STATE_SHUTDOWN | E86_STATE_NPX_STOP)) {
 		return;
 	}
 
@@ -626,7 +649,7 @@ void e86_execute (e8086_t *c)
 		if (c->state & E86_STATE_RESET) {
 			e86_reset (c);
 		}
-		else if (c->state & E86_STATE_SHUTDOWN) {
+		else if (c->state & (E86_STATE_SHUTDOWN | E86_STATE_NPX_STOP)) {
 			e86_set_clk (c, 2);
 			return;
 		}
@@ -676,7 +699,7 @@ void e86_execute (e8086_t *c)
 
 	c->opcnt += 1;
 
-	if (c->state & E86_STATE_SHUTDOWN) {
+	if (c->state & (E86_STATE_SHUTDOWN | E86_STATE_NPX_STOP)) {
 		return;
 	}
 

@@ -55,6 +55,7 @@ Run tests from the repository root after configuring the project:
 
 ```sh
 make check-help            # List suites and overrides
+make check-npx-unit        # Experimental NPX format/state/CPU-interface tests
 make check-build           # Build every C test without running it
 make check-unit            # Run every C test; no external ROMs or disk images
 make check-cpu-regression  # Cross-CPU regression gate (Python 3)

@@ -510,6 +510,7 @@ check-help:
 	@printf '%s\n' \
 	 'check-build / check-at-build: compile tests without running them' \
 	 'check-unit / check-at-unit: ROM-free C tests' \
+	 'check-npx-unit: experimental NPX format, state and CPU-interface tests' \
 	 'check-cpu-regression: cross-CPU gate' \
 	 'check: C, CPU guest images, CLI exit and native IBM/AMI AT smoke tests' \
 	 'check-at: AT component and native smoke tests' \
@@ -525,3 +526,81 @@ check-help:
 DIST += $(addsuffix .c,$(TEST_BINS)) tests/build_images.sh tests/guest_runner.py tests/run_e2e.py \
  tests/run_at_tests.py tests/test.cfg tests/at-5170.cfg tests/at-5170-ami.cfg \
  tests/asm/tataccept.asm tests/asm/tfloppysoak.asm tests/asm/tpmsoak.asm
+
+# NPX foundation: raw operand transfers; no guest coprocessor advertised yet.
+.PHONY: check-npx-unit
+check-npx-unit: tests/test_npx_format
+	./tests/test_npx_format
+check-unit: check-npx-unit
+check-build: tests/test_npx_format
+
+tests/test_npx_format: tests/test_npx_format.c src/cpu/e8087/real80.c src/cpu/e8087/real80.h
+	$(CC) $(CFLAGS_DEFAULT) -o $@ tests/test_npx_format.c src/cpu/e8087/real80.c
+CLN += tests/test_npx_format
+DIST += tests/test_npx_format.c src/cpu/e8087/real80.c src/cpu/e8087/real80.h
+
+check-npx-unit: check-npx-state
+.PHONY: check-npx-state
+check-npx-state: tests/test_npx_state
+	./tests/test_npx_state
+check-build: tests/test_npx_state
+
+tests/test_npx_state: tests/test_npx_state.c src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.h
+	$(CC) $(CFLAGS_DEFAULT) -o $@ tests/test_npx_state.c src/cpu/e8087/e8087.c
+CLN += tests/test_npx_state
+DIST += tests/test_npx_state.c src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h
+
+.PHONY: check-npx-cpu
+check-npx-unit: check-npx-cpu
+check-npx-cpu: tests/test_npx_cpu
+	./tests/test_npx_cpu
+check-build: tests/test_npx_cpu
+
+tests/test_npx_cpu: tests/test_npx_cpu.c src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.h $(E8086_HDR) $(E8086_ARC)
+	$(CC) $(CFLAGS_DEFAULT) -o $@ tests/test_npx_cpu.c src/cpu/e8087/e8087.c $(E8086_ARC)
+CLN += tests/test_npx_cpu
+DIST += tests/test_npx_cpu.c
+
+# Initial pinned SoftFloat subset; production machine wiring is not enabled.
+NPX_FLOAT_SRC := $(wildcard src/cpu/e8087/softfloat/*.c)
+NPX_FLOAT_HDR := $(wildcard src/cpu/e8087/softfloat/*.h)
+.PHONY: check-npx-arithmetic
+check-npx-unit: check-npx-arithmetic
+check-npx-arithmetic: tests/test_npx_arithmetic
+	./tests/test_npx_arithmetic
+check-build: tests/test_npx_arithmetic
+tests/test_npx_arithmetic: tests/test_npx_arithmetic.c src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h src/cpu/e8087/real80.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR)
+	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_arithmetic.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC)
+CLN += tests/test_npx_arithmetic
+DIST += tests/test_npx_arithmetic.c src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR) src/cpu/e8087/softfloat/COPYING.txt src/cpu/e8087/softfloat/LICENSE.md src/cpu/e8087/softfloat/README.pce
+
+.PHONY: check-npx-execute
+check-npx-unit: check-npx-execute
+check-npx-execute: tests/test_npx_execute
+	./tests/test_npx_execute
+check-build: tests/test_npx_execute
+tests/test_npx_execute: tests/test_npx_execute.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.c src/cpu/e8087/real80.h src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR)
+	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_execute.c src/cpu/e8087/execute.c src/cpu/e8087/e8087.c src/cpu/e8087/real80.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC)
+CLN += tests/test_npx_execute
+DIST += tests/test_npx_execute.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h
+
+.PHONY: check-npx-memory
+check-npx-unit: check-npx-memory
+check-npx-memory: tests/test_npx_memory
+	./tests/test_npx_memory
+check-build: tests/test_npx_memory
+tests/test_npx_memory: tests/test_npx_memory.c src/cpu/e8087/execute.c src/cpu/e8087/execute.h src/cpu/e8087/e8087.c src/cpu/e8087/e8087.h src/cpu/e8087/real80.c src/cpu/e8087/real80.h src/cpu/e8087/arithmetic.c src/cpu/e8087/arithmetic.h $(NPX_FLOAT_SRC) $(NPX_FLOAT_HDR) $(E8086_ARC) $(E8086_HDR)
+	$(CC) $(CFLAGS_DEFAULT) -DSOFTFLOAT_FAST_INT64 -DINLINE_LEVEL=5 -Isrc/cpu/e8087/softfloat -o $@ tests/test_npx_memory.c src/cpu/e8087/execute.c src/cpu/e8087/e8087.c src/cpu/e8087/real80.c src/cpu/e8087/arithmetic.c $(NPX_FLOAT_SRC) $(E8086_ARC)
+CLN += tests/test_npx_memory
+DIST += tests/test_npx_memory.c
+
+# Numeric callback adapters use the CPU event contract.
+tests/test_npx_execute: $(E8086_HDR)
+
+# Explicit hardware-characterization utility; never launched by make check.
+.PHONY: npx-overflow-probe
+npx-overflow-probe: tests/npxovf.com
+tests/npxovf.com: $(srcdir)/tests/asm/npxovf.asm
+	$(NASM) -f bin $< -o $@
+CLN += tests/npxovf.com
+DIST += tests/asm/npxovf.asm tests/decode_npx_overflow.py tests/npx-overflow-probe.md

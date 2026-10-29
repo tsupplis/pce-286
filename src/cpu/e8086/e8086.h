@@ -94,6 +94,8 @@
 #define E86_STATE_HALT  1
 #define E86_STATE_RESET 2
 #define E86_STATE_SHUTDOWN 4
+/* Development stop: attached NPX rejected an unimplemented operation. */
+#define E86_STATE_NPX_STOP 8
 
 
 struct e8086_t;
@@ -107,11 +109,34 @@ typedef void (*e86_set_uint16_f) (void *ext, unsigned long addr, unsigned short 
 typedef unsigned (*e86_opcode_f) (struct e8086_t *c);
 
 
+/* Optional non-owning NPX interface. Called after CPU #7 checks.
+ * Return 1 for completion, 0 for an unsupported operation (development stop).
+ * Memory attachment is optional; WAIT wiring is a separate milestone. */
+typedef int (*e86_npx_control_f)(void *, unsigned, unsigned, unsigned short *);
+/* Staged m80 transfer: query=1 must not mutate state/buffer and returns
+ * 1 for read, 2 for write, 0 unsupported. query=0 executes using 10 checked
+ * bytes, returning 1 to commit, 2 for a handled exception with NO memory
+ * write, or 0 for unsupported with no mutation. CPU preflights
+ * guest access before execution. Guest memory callbacks cannot report faults. */
+typedef int (*e86_npx_memory_f)(void *, unsigned, unsigned, int, unsigned char *);
+/* Optional data-channel events. BUSY is a side-effect-free query; OVERRUN
+ * latches a stalled transfer. WAIT observes CPU synchronization (may assert
+ * an error signal) and returns whether to stall. ERROR queries the optional
+ * direct 286 ERROR pin for #16; board IRQ13 wiring is separate.
+ * Unknown events return zero.
+ * FNINIT is delivered through control as usual. */
+enum { E86_NPX_BUSY, E86_NPX_OVERRUN, E86_NPX_WAIT, E86_NPX_ERROR };
+typedef int (*e86_npx_event_f)(void *, unsigned);
+
 typedef struct e8086_t {
 	/* Registers remain authoritative here; engine is synchronized per step. */
 	e8080_t nec8080;
 	unsigned char nec_md_write;
 	unsigned         cpu;
+	void             *npx_ext;
+	e86_npx_control_f npx_control;
+	e86_npx_memory_f npx_memory;
+	e86_npx_event_f npx_event;
 
 	unsigned short   dreg[8];
 	unsigned short   sreg[4];
@@ -514,6 +539,11 @@ void e86_set_mem16_sreg (e8086_t *c, unsigned reg, unsigned short ofs, unsigned 
 
 void e86_init (e8086_t *c);
 void e86_free (e8086_t *c);
+/* Pass NULL callback to detach; CPU reset retains attachment, not NPX reset. */
+void e86_set_npx_control(e8086_t *c, void *ext, e86_npx_control_f control);
+/* Set after control attachment. Replacing/detaching control clears memory. */
+void e86_set_npx_memory(e8086_t *c, e86_npx_memory_f memory);
+void e86_set_npx_event(e8086_t *c, e86_npx_event_f event);
 
 e8086_t *e86_new (void);
 void e86_del (e8086_t *c);

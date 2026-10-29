@@ -10,6 +10,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 GROUPS = {
+    "NPX foundation and CPU attachment": ["test_npx_format", "test_npx_state", "test_npx_cpu", "test_npx_arithmetic", "test_npx_execute", "test_npx_memory"],
     "8080 + shared Z80 regression": ["test_8080_audit"],
     "Shared repeat path: all seven models": ["test_repeat_compliance"],
     "8086/8088 + 80186/80188": ["test_x86_compliance", "test_186ext"],

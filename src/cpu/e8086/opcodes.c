@@ -2782,6 +2782,17 @@ unsigned op_9b (e8086_t *c)
 		e86_fault (c, 7);
 		return (0);
 	}
+    if ((c->cpu & E86_CPU_FLAGS286) && !(c->msw & 4) && c->npx_event &&
+        c->npx_event(c->npx_ext, E86_NPX_ERROR)) {
+        e86_fault(c, 16);
+        e86_set_clk(c, 4);
+        return 0;
+    }
+    if (c->npx_event && (c->npx_event(c->npx_ext, E86_NPX_WAIT) ||
+        c->npx_event(c->npx_ext, E86_NPX_BUSY))) {
+        e86_set_clk(c, 4);
+        return 0; /* Remain interruptible while waiting for FNINIT/reset. */
+    }
 	e86_set_clk (c, 4);
 
 	return (1);
@@ -4315,7 +4326,81 @@ unsigned op_d8 (e8086_t *c)
 		return (0);
 	}
 
-	e86_get_ea_ptr (c, c->pq + 1);
+    /* Intel 286 PRM #MF: these no-wait control encodings bypass ERROR.
+     * This is the optional direct CPU pin, not an IBM AT IRQ13 route. */
+    unsigned op=c->pq[0], mr=c->pq[1];
+    unsigned no_error=(op==0xdb && mr>=0xe0 && mr<=0xe4) ||
+        (op==0xdf && mr==0xe0) ||
+        (mr<0xc0 && (op==0xd9 || op==0xdd) && ((mr>>3)&7)>=6);
+    if ((c->cpu & E86_CPU_FLAGS286) && !no_error && c->npx_event &&
+        c->npx_event(c->npx_ext, E86_NPX_ERROR)) {
+        e86_fault(c, 16);
+        e86_set_clk(c, 4);
+        return 0;
+    }
+    if (c->npx_event && !(c->pq[0] == 0xdb && c->pq[1] == 0xe3) &&
+        c->npx_event(c->npx_ext, E86_NPX_BUSY)) {
+        e86_set_clk(c, 4);
+        return 0;
+    }
+    if (c->npx_control != NULL && c->pq[1] < 0xc0) {
+        unsigned char bytes[10] = {0};
+        unsigned reg, i, limit;
+        int completion;
+        int direction = c->npx_memory ?
+            c->npx_memory(c->npx_ext, c->pq[0], c->pq[1], 1, NULL) : 0;
+        if (direction != 1 && direction != 2) {
+            c->state |= E86_STATE_NPX_STOP;
+            return 0;
+        }
+        e86_get_ea_ptr(c, c->pq + 1);
+        reg = e86_ea_seg_reg(c);
+        if (e86_check_seg_access(c, reg, c->ea.ofs, 2, direction == 2)) return 0;
+        /* The 286 checks the first word before issuing the ESC. Later
+         * transfer overruns are #9, not restartable operand #GP/#SS faults.
+         * See Intel 286/287 PRM sections 5.2 and 9.6.3. */
+        limit = (c->cpu & E86_CPU_FLAGS286) &&
+                ((c->seg_ar[reg] & 0x1c) != 0x14) ? c->seg_limit[reg] : 0xffff;
+        if ((unsigned long)c->ea.ofs + 9 > limit) {
+            if ((c->cpu & E86_CPU_FLAGS286) && c->npx_event &&
+                c->npx_event(c->npx_ext, E86_NPX_OVERRUN)) {
+                e86_set_clk(c, 50);
+                if (c->msw & E286_MSW_PE) {
+                    /* Functional synchronous model: earliest boundary after
+                     * ESC, no error word. Hardware may interrupt later. */
+                    e86_set_ip(c, c->ip + 1 + c->ea.cnt);
+                    c->prefix = 0;
+                    e86_trap(c, 9);
+                } else {
+                    /* Chapter 5 specifies the ESC address in real mode. */
+                    e86_fault(c, 9);
+                }
+            } else c->state |= E86_STATE_NPX_STOP; /* 8087 bus wrap pending */
+            return 0;
+        }
+        if (e86_check_seg_access(c, reg, c->ea.ofs, 10, direction == 2)) return 0;
+        if (direction == 1)
+            for (i = 0; i < 10; ++i)
+                bytes[i] = e86_get_mem8_sreg(c, reg, c->ea.ofs + i);
+        completion = c->npx_memory(c->npx_ext, c->pq[0], c->pq[1], 0, bytes);
+        if (completion != 1 && completion != 2) {
+            c->state |= E86_STATE_NPX_STOP;
+            return 0;
+        }
+        if (direction == 2 && completion == 1)
+            for (i = 0; i < 10; ++i)
+                e86_set_mem8_sreg(c, reg, c->ea.ofs + i, bytes[i]);
+    } else {
+        if (c->npx_control != NULL) {
+            unsigned short ax = e86_get_ax(c);
+            if (!c->npx_control(c->npx_ext, c->pq[0], c->pq[1], &ax)) {
+                c->state |= E86_STATE_NPX_STOP;
+                return 0;
+            }
+            e86_set_ax(c, ax);
+        }
+        e86_get_ea_ptr(c, c->pq + 1);
+    }
 	e86_set_clk (c, 2);
 
 	return (1 + c->ea.cnt);
