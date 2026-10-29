@@ -42,7 +42,8 @@ unsigned e87_tag(const e87_t *n, unsigned logical);
 int e87_control(e87_t *n, unsigned opcode, unsigned modrm, uint16_t *ax);
 /* Staged 287 memory controls. Returns required bytes (2/14/94), or zero.
  * query is side-effect free; caller must validate the entire operand before
- * execution and commit stores. No CPU attachment or address tracking yet.
+ * execution and commit stores. CPU adapter is available; automatic address
+ * tracking is not yet implemented.
  * FNSTENV remains unsupported pending resolution of conflicting early manuals. */
 unsigned e87_memory_control(e87_t *n, unsigned op, unsigned mr,
                             int query, unsigned char *bytes);

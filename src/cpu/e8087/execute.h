@@ -19,7 +19,9 @@
  * A return of 0 is NOT an architectural exception or a successful instruction. */
 int e87_numeric(e87_t *n, unsigned opcode, unsigned modrm,
                 const unsigned char *input, unsigned char *output);
-/* Optional CPU callback adapters; still a development subset. */
+/* Optional CPU callback adapters; still a development subset. Memory also
+ * supports 287 control/state operands of 2/14/94 bytes via e87_memory_control.
+ * CPU preflights the complete operand before core mutation or guest writes. */
 int e87_cpu_control(void *n, unsigned op, unsigned mr, unsigned short *ax);
 int e87_cpu_memory(void *n, unsigned op, unsigned mr, int query, unsigned char *bytes);
 int e87_cpu_event(void *n, unsigned event);

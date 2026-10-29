@@ -216,6 +216,11 @@ int e87_cpu_control(void *n, unsigned op, unsigned mr, unsigned short *ax)
 int e87_cpu_memory(void *n, unsigned op, unsigned mr, int query, unsigned char *bytes)
 {
     unsigned form = (mr >> 3) & 7;
+    unsigned size = e87_memory_control(n, op, mr, 1, 0);
+    if (size) {
+        if (query) return (size << 2) | (form >= 6 ? 2 : 1);
+        return e87_memory_control(n, op, mr, 0, bytes) ? 1 : 0;
+    }
     if (op != 0xdb || mr >= 0xc0 || (form != 5 && form != 7)) return 0;
     if (query) return form == 5 ? 1 : 2;
     return e87_numeric(n, op, mr, form == 5 ? bytes : 0, form == 7 ? bytes : 0);

@@ -46,6 +46,39 @@ static void protected_setup(e8086_t *c)
     }
     c->msw|=1;
 }
+/* Exercise each staged control through actual ESC decoding, including edges. */
+static void memory_controls(void)
+{
+    const unsigned ops[]={0xd9,0xd9,0xdd,0xd9,0xdd,0xdd};
+    const unsigned forms[]={5,7,7,4,4,6}, sizes[]={2,2,2,14,94,94};
+    for(unsigned k=0;k<6;++k) for(unsigned edge=0;edge<3;++edge) {
+        e8086_t *c=cpu(1); e87_t n,before; unsigned char image[94];
+        e87_init(&n,E87_80287); n.status=0x1800; n.tags=0x1234;
+        n.reg[3]=(e87_real80_t){UINT64_C(0x8123456789abcdef),0x4000};
+        e87_t saved=n; CHECK(e87_memory_control(&saved,0xdd,0x30,0,image)==94);
+        memcpy(ram+0x600,image,94); ram[0x5ff]=0xa5;ram[0x600+sizes[k]]=0xa5;
+        protected_setup(c);c->seg_limit[E86_REG_DS]=edge==0 ? 0x600+sizes[k]-1 : edge==1 ? 0x600 : 0x600+sizes[k]-2;
+        e86_set_bx(c,0x600);e86_set_npx_control(c,&n,e87_cpu_control);
+        e86_set_npx_memory(c,e87_cpu_memory);e86_set_npx_event(c,e87_cpu_event);
+        before=n; unsigned char old[94];memcpy(old,ram+0x600,94);
+        step(c,ops[k],(forms[k]<<3)|7);
+        CHECK(!(c->state&E86_STATE_NPX_STOP));
+        if(edge==0) {
+            CHECK(c->ip==0x102);
+            CHECK(ram[0x5ff]==0xa5 && ram[0x600+sizes[k]]==0xa5);
+            if(k==5) { CHECK(n.tags==0xffff && n.status==0); CHECK(!memcmp(ram+0x600,image,94)); }
+            else if(k==1) CHECK(r16(0,0x600)==before.control);
+            else if(k==2) CHECK(r16(0,0x600)==before.status);
+            else CHECK(n.status==before.status && n.tags==before.tags);
+        } else {
+            CHECK(c->ip==0x500);
+            CHECK(!memcmp(old,ram+0x600,94));
+            CHECK(n.control==before.control && n.status==before.status && n.tags==before.tags);
+            CHECK(n.transfer_blocked==(edge==2 && sizes[k]>2));
+        }
+        e86_del(c);
+    }
+}
 /* Real CPU bytes: after-operation PE, mask controls, WAIT and recovery. */
 static void precision_wait(void)
 {
@@ -129,6 +162,7 @@ static void pending_287(void)
 }
 int main(void)
 {
+    memory_controls();
     unsigned model, kind;
     precision_wait();
     pending_287();

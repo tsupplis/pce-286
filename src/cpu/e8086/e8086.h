@@ -113,8 +113,9 @@ typedef unsigned (*e86_opcode_f) (struct e8086_t *c);
  * Return 1 for completion, 0 for an unsupported operation (development stop).
  * Memory attachment is optional; WAIT wiring is a separate milestone. */
 typedef int (*e86_npx_control_f)(void *, unsigned, unsigned, unsigned short *);
-/* Staged m80 transfer: query=1 must not mutate state/buffer and returns
- * 1 for read, 2 for write, 0 unsupported. query=0 executes using 10 checked
+/* Staged NPX transfer: query=1 must not mutate state/buffer and returns
+ * 1 for read, 2 for write (legacy 10 bytes), 0 unsupported. Other sizes
+ * encode (size << 2) | direction, with size 2..94. query=0 uses checked
  * bytes, returning 1 to commit, 2 for a handled exception with NO memory
  * write, or 0 for unsupported with no mutation. CPU preflights
  * guest access before execution. Guest memory callbacks cannot report faults. */

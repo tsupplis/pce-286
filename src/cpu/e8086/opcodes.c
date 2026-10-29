@@ -4344,12 +4344,14 @@ unsigned op_d8 (e8086_t *c)
         return 0;
     }
     if (c->npx_control != NULL && c->pq[1] < 0xc0) {
-        unsigned char bytes[10] = {0};
-        unsigned reg, i, limit;
+        unsigned char bytes[94] = {0};
+        unsigned reg, i, limit, size;
         int completion;
         int direction = c->npx_memory ?
             c->npx_memory(c->npx_ext, c->pq[0], c->pq[1], 1, NULL) : 0;
-        if (direction != 1 && direction != 2) {
+        size = direction > 2 ? (unsigned)direction >> 2 : 10;
+        direction &= 3;
+        if ((direction != 1 && direction != 2) || size < 2 || size > sizeof bytes) {
             c->state |= E86_STATE_NPX_STOP;
             return 0;
         }
@@ -4361,7 +4363,7 @@ unsigned op_d8 (e8086_t *c)
          * See Intel 286/287 PRM sections 5.2 and 9.6.3. */
         limit = (c->cpu & E86_CPU_FLAGS286) &&
                 ((c->seg_ar[reg] & 0x1c) != 0x14) ? c->seg_limit[reg] : 0xffff;
-        if ((unsigned long)c->ea.ofs + 9 > limit) {
+        if ((unsigned long)c->ea.ofs + size - 1 > limit) {
             if ((c->cpu & E86_CPU_FLAGS286) && c->npx_event &&
                 c->npx_event(c->npx_ext, E86_NPX_OVERRUN)) {
                 e86_set_clk(c, 50);
@@ -4378,9 +4380,9 @@ unsigned op_d8 (e8086_t *c)
             } else c->state |= E86_STATE_NPX_STOP; /* 8087 bus wrap pending */
             return 0;
         }
-        if (e86_check_seg_access(c, reg, c->ea.ofs, 10, direction == 2)) return 0;
+        if (e86_check_seg_access(c, reg, c->ea.ofs, size, direction == 2)) return 0;
         if (direction == 1)
-            for (i = 0; i < 10; ++i)
+            for (i = 0; i < size; ++i)
                 bytes[i] = e86_get_mem8_sreg(c, reg, c->ea.ofs + i);
         completion = c->npx_memory(c->npx_ext, c->pq[0], c->pq[1], 0, bytes);
         if (completion != 1 && completion != 2) {
@@ -4388,7 +4390,7 @@ unsigned op_d8 (e8086_t *c)
             return 0;
         }
         if (direction == 2 && completion == 1)
-            for (i = 0; i < 10; ++i)
+            for (i = 0; i < size; ++i)
                 e86_set_mem8_sreg(c, reg, c->ea.ofs + i, bytes[i]);
     } else {
         if (c->npx_control != NULL) {
