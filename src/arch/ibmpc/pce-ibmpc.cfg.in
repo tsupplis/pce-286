@@ -849,4 +849,5 @@ npx {
 }
 
 # With npx.model = "80287", timing = 1 (default) enables a partial typical-cycle
-# profile. timing = 0 restores functional pacing. See README for limitations.
+# profile. Optional clock_hz = 4000000 selects a fixed 4 MHz NPX clock.
+# clock_hz = 0 follows CPU clocks. timing = 0 restores functional pacing. See README for limitations.

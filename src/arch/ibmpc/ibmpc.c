@@ -3133,6 +3133,7 @@ void pc_clock (ibmpc_t *pc, unsigned long cnt)
 	pc->sync_clock2_sim += 1;
 
 	pc->clock2 += 1;
+	if (pc->npx.clock_hz && pc->npx.busy_cycles) pc_npx_board_tick(pc);
 
 	pce_video_clock0 (pc->video, 1, 1);
 

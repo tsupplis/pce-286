@@ -6,7 +6,7 @@
 #include <string.h>
 static unsigned checks, failures;
 #define CHECK(x) do { checks++; if (!(x)) {printf("FAIL line %u: %s\n",__LINE__,#x); failures++;}} while(0)
-static ibmpc_t *machine(const char *sys,const char *cpu,const char *npx)
+static ibmpc_t *machine_clock(const char *sys,const char *cpu,const char *npx,unsigned long hz)
 {
     ini_sct_t *cfg=ini_sct_new(NULL);
     ibmpc_t *pc;
@@ -14,7 +14,8 @@ static ibmpc_t *machine(const char *sys,const char *cpu,const char *npx)
     ini_set_uint32(cfg,"system.patch_bios_init",0);
     ini_set_str(cfg,"cpu.model",cpu);
     if(npx) ini_set_str(cfg,"npx.model",npx);
-    ini_set_uint32(cfg,"npx.timing",0);
+    ini_set_uint32(cfg,"npx.timing",hz!=0);
+    ini_set_uint32(cfg,"npx.clock_hz",hz);
     ini_set_uint32(cfg,"ram.size",640*1024);
     ini_set_str(cfg,"terminal.driver","null");
     ini_set_str(cfg,"video.device","cga");
@@ -22,6 +23,8 @@ static ibmpc_t *machine(const char *sys,const char *cpu,const char *npx)
     if(!pc) ini_sct_del(cfg);
     return pc;
 }
+static ibmpc_t *machine(const char *sys,const char *cpu,const char *npx)
+{ return machine_clock(sys,cpu,npx,0); }
 static void destroy(ibmpc_t *pc)
 {
     pc_del(pc);
@@ -192,6 +195,84 @@ static void execution_timing(void)
     code(pc,program,sizeof program);steps(pc,2);
     CHECK(pc->npx.busy_cycles);pc_npx_write(pc,0xf1,0);
     CHECK(!pc->npx.busy_cycles);
+    /* FLD1; FIADD word [0300]; INC AX; WAIT. */
+    const unsigned char mem_add[]={0xd9,0xe8,0xde,0x06,0,3,0xdf,0xe0,0x40,0x9b};
+    code(pc,mem_add,sizeof mem_add);
+    mem_set_uint16_le(pc->mem,0x300,2);
+    steps(pc,2);
+    CHECK(pc->npx.busy_cycles==120);
+    CHECK(pc->npx.core.reg[e87_top(&pc->npx.core)].significand==UINT64_C(0x8000000000000000));
+    steps(pc,1);CHECK(e86_get_ax(pc->cpu)&0x8000); /* FNSTSW AX while busy */
+    unsigned ax=e86_get_ax(pc->cpu);
+    steps(pc,1);CHECK(e86_get_ax(pc->cpu)==((ax+1)&0xffff));
+    pc->cpu->clock=pc->npx.busy_start+119;
+    steps(pc,1);CHECK(pc->cpu->ip==0x109);
+    pc->cpu->clock=pc->npx.busy_start+120;
+    steps(pc,1);CHECK(pc->cpu->ip==0x10a && !pc->npx.busy_cycles);
+    CHECK(pc->npx.core.reg[e87_top(&pc->npx.core)].significand==UINT64_C(0xc000000000000000));
+    CHECK(!(pc->npx.core.status&0x8000));
+    const unsigned char divzero[]={0xdb,0xe3,0xd9,0xe8,0xd9,0xee,0xde,0xf9};
+    code(pc,divzero,sizeof divzero);steps(pc,3);pc->npx.core.control&=~4u;
+    steps(pc,1);CHECK(pc->npx.busy_cycles && !pc->npx.error && !pc->npx.busy_latch);
+    pc->cpu->clock+=pc->npx.busy_cycles;pc_npx_check_stop(pc);
+    CHECK(pc->npx.error && pc->npx.busy_latch && (pc->npx.core.status&4));
+    const unsigned char compare[]={0xdb,0xe3,0xd9,0xe8,0xd8,0xd0,0xdf,0xe0,0x9b};
+    pc_npx_reset(pc);
+    code(pc,compare,sizeof compare);steps(pc,3);
+    CHECK(pc->npx.busy_cycles==45);
+    steps(pc,1);
+    CHECK((e86_get_ax(pc->cpu)&0xc000)==0x8000);
+    pc->cpu->clock=pc->npx.busy_start+45;
+    steps(pc,1);
+    CHECK(!pc->npx.busy_cycles && (pc->npx.core.status&0x4000));
+    destroy(pc);
+}
+/* Compare timed and functional CPU delay for the same completed ESC. */
+static unsigned long transfer_cost(ibmpc_t *pc,unsigned op,unsigned mr,unsigned odd,
+                                   unsigned timing)
+{
+    unsigned char program[]={op,mr,odd,3};
+    pc_npx_reset(pc);
+    code(pc,program,sizeof program);
+    pc->npx.timing=timing;
+    unsigned long before=pc->cpu->delay;
+    steps(pc,1);
+    return pc->cpu->delay-before;
+}
+static void operand_transfers(void)
+{
+    ibmpc_t *pc=machine("5170","80286","80287");
+    const struct {unsigned op,mr,words;} cases[]={
+        {0xdf,0x06,1}, /* FILD int16 */
+        {0xdd,0x06,4}, /* FLD real64 */
+        {0xd9,0x3e,1}, /* FNSTCW */
+        {0xdd,0x36,47} /* FNSAVE */
+    };
+    for(unsigned i=0;i<sizeof cases/sizeof cases[0];i++)
+        for(unsigned odd=0;odd<2;odd++) {
+            unsigned long functional=transfer_cost(pc,cases[i].op,cases[i].mr,odd,0);
+            unsigned long timed=transfer_cost(pc,cases[i].op,cases[i].mr,odd,1);
+            CHECK(timed-functional==cases[i].words*(odd?6:4));
+        }
+    destroy(pc);
+}
+static void independent_clock(void)
+{
+    const unsigned char program[]={0xd9,0xe8,0xd9,0xfa,0x9b,0xf4};
+    ibmpc_t *pc=machine_clock("5170","80286","80287",4000000);
+    CHECK(pc && pc->npx.clock_hz==4000000);
+    if (!pc) return;
+    code(pc,program,sizeof program);
+    steps(pc,2);
+    /* ceil(183 * 1193182 / 4000000) = 55 motherboard ticks. */
+    CHECK(pc->npx.ticks_remaining==55);
+    pc->clock1=0;
+    for(unsigned tick=0;tick<55;tick++) {
+        pc->speed_current=tick<20 ? 2 : 8;
+        for(unsigned i=0;i<pc->speed_current;i++) pc_clock(pc,4);
+        CHECK(!!pc->npx.busy_cycles==(tick<54));
+    }
+    steps(pc,1);CHECK(pc->cpu->ip==0x105);
     destroy(pc);
 }
 int main(void)
@@ -214,7 +295,34 @@ int main(void)
     test("5170","80286","80287");
     protected_irq();
     stop_diagnostic();
+    {
+        ibmpc_t *xt=machine_clock("5160","8088","8087",4772728);
+        /* FLD1, FADD ST,ST, INC AX, WAIT */
+        const unsigned char probe[]={0xd9,0xe8,0xd8,0xc0,0x40,0x9b};
+        code(xt,probe,sizeof probe);
+        steps(xt,2);
+        CHECK(xt->npx.busy_cycles==85);
+        unsigned ax=e86_get_ax(xt->cpu);
+        steps(xt,2);
+        CHECK(e86_get_ax(xt->cpu)==((ax+1)&0xffff) && xt->cpu->ip==0x105);
+        xt->cpu->clock=xt->npx.busy_start+84;
+        steps(xt,1); CHECK(xt->cpu->ip==0x105);
+        xt->cpu->clock++;
+        steps(xt,1); CHECK(xt->cpu->ip==0x106 && !xt->npx.busy_cycles);
+        CHECK(xt->npx.core.reg[e87_top(&xt->npx.core)].sign_exponent==0x4000);
+        const unsigned char interrupt_control[]={0xdb,0xe3,0xd9,0xe8,
+            0xd8,0xc0,0xdb,0xe0,0x9b};
+        code(xt,interrupt_control,sizeof interrupt_control);
+        steps(xt,4);
+        CHECK(!(xt->npx.core.control & 0x80));
+        xt->cpu->clock=xt->npx.busy_start+85;
+        steps(xt,1);
+        CHECK(!(xt->npx.core.control & 0x80));
+        destroy(xt);
+    }
     execution_timing();
+    independent_clock();
+    operand_transfers();
     printf("NPX board: %u checks, %u failures\n",checks,failures);
     return failures!=0;
 }

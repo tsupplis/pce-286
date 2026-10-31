@@ -126,7 +126,8 @@ typedef int (*e86_npx_memory_f)(void *, unsigned, unsigned, int, unsigned char *
  * direct 286 ERROR pin for #16; board IRQ13 wiring is separate.
  * Unknown events return zero.
  * FNINIT is delivered through control as usual. */
-enum { E86_NPX_BUSY, E86_NPX_OVERRUN, E86_NPX_WAIT, E86_NPX_ERROR };
+enum { E86_NPX_BUSY, E86_NPX_OVERRUN, E86_NPX_WAIT, E86_NPX_ERROR,
+       E86_NPX_TIMED_TRANSFERS };
 typedef int (*e86_npx_event_f)(void *, unsigned);
 /* Successful ESC metadata; callback decides which numeric forms track pointers.
  * ip includes prefixes, esc_ip does not; linear addresses precede bus masking. */

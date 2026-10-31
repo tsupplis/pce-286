@@ -1,6 +1,7 @@
 /* PC/XT and AT coprocessor wiring. GPL-2.0-or-later. */
 #include "ibmpc.h"
 #include "npx.h"
+#include "main.h"
 #include <cpu/e8087/execute.h>
 #include <lib/log.h>
 #include <string.h>
@@ -35,14 +36,40 @@ static void update(ibmpc_t *pc)
     b->error=error;
 }
 /* Intel 286/287 PRM table 2-14 typical execution clocks. First timing
- * profile: register arithmetic and transcendental operations. Unlisted forms
+ * profile: register/memory arithmetic and transcendental operations. Unlisted forms
  * retain functional timing; transfer cycles and exception penalties are not
  * modeled. One NPX clock per emulated CPU clock, independent of host speed. */
-static unsigned latency(unsigned op,unsigned mr)
+static unsigned latency(unsigned model,unsigned op,unsigned mr)
 {
-    if (mr<0xc0) return 0;
+    /* Intel 8086 Family Numerics Supplement, instruction reference.
+     * Representative midrange execution times for register forms. */
+    if (model==E87_8087) {
+        if (op==0xd9 && mr==0xfa) return 183;
+        if (mr>=0xc0 && (op==0xd8 || op==0xdc || op==0xde)) {
+            switch ((mr>>3)&7) {
+            case 0: case 4: case 5: return 85;
+            case 1: return 138;
+            case 6: case 7: return 198;
+            }
+        }
+        return 0;
+    }
+    if (mr<0xc0) {
+        /* Table 2-14 typical clocks by operand format and ModR/M group.
+         * Long-real multiply uses the general-significand entry. */
+        static const unsigned short clocks[4][8]={
+            /* add  mul  cmp cmp/pop sub subr div divr */
+            {105,118,65,68,105,105,220,221}, /* D8 real32 */
+            {125,136,85,87,125,125,236,237}, /* DA int32 */
+            {110,161,70,72,110,110,225,226}, /* DC real64 */
+            {120,130,80,82,120,120,230,230}  /* DE int16 */
+        };
+        if (op<0xd8 || op>0xde || (op&1)) return 0;
+        return clocks[(op-0xd8)/2][(mr>>3)&7];
+    }
     if (op==0xd9) {
         switch(mr) {
+        case 0xe4:return 42; case 0xe5:return 17;
         case 0xf0:return 500; case 0xf1:return 950; case 0xf2:return 450;
         case 0xf3:return 650; case 0xf9:return 850; case 0xfa:return 183;
         default:return 0;
@@ -50,6 +77,9 @@ static unsigned latency(unsigned op,unsigned mr)
     }
     if(op==0xd8 || op==0xdc || op==0xde) {
         unsigned group=(mr>>3)&7,pop=op==0xde;
+        if (op==0xde && mr==0xd9) return 50;
+        if (op==0xd8 && group==2) return 45;
+        if (op==0xd8 && group==3) return 47;
         if(group==0 || group==4 || group==5)return pop?90:85;
         /* General operands; short-significand fast path is not modeled. */
         if(group==1)return pop?142:138;
@@ -60,40 +90,84 @@ static unsigned latency(unsigned op,unsigned mr)
 static unsigned timed_busy(ibmpc_t *pc)
 {
     pc_npx_t *b=&pc->npx;
-    if(b->busy_cycles && pc->cpu->clock-b->busy_start>=b->busy_cycles)
+    if (b->busy_cycles && (b->clock_hz ? b->ticks_remaining==0 :
+        pc->cpu->clock-b->busy_start >= b->busy_cycles)) {
+        b->core=b->pending;
         b->busy_cycles=0;
+        update(pc);
+    }
     return b->busy_cycles!=0;
 }
+
+/* Tick from the same emulated timebase as the PIT, including in adaptive
+ * CPU speed mode. Completion is observable at motherboard tick resolution. */
+void pc_npx_board_tick(ibmpc_t *pc)
+{
+    pc_npx_t *b=&pc->npx;
+    if (b->busy_cycles && b->clock_hz && --b->ticks_remaining==0)
+        timed_busy(pc);
+}
+
+static e87_t *execution_state(pc_npx_t *b,unsigned clocks)
+{
+    if (!clocks) return &b->core;
+    b->pending=b->core;
+    return &b->pending;
+}
+
+static void begin_busy(ibmpc_t *pc,unsigned clocks)
+{
+    pc->npx.busy_start=pc->cpu->clock;
+    pc->npx.busy_cycles=clocks;
+    if (pc->npx.clock_hz) {
+        uint64_t duration=(uint64_t)clocks*PCE_IBMPC_CLK2;
+        pc->npx.ticks_remaining=1+(duration-1)/pc->npx.clock_hz;
+    }
+    pc->npx.core.status|=0x8000;
+}
+
 static int control(void *ext,unsigned op,unsigned mr,unsigned short *ax)
 {
     ibmpc_t *pc=ext;
-    int done=e87_cpu_control(&pc->npx.core,op,mr,ax);
-    if(done && pc->npx.timing) {
-        if(op==0xdb && mr==0xe3)pc->npx.busy_cycles=0;
-        else if(latency(op,mr)) {
-            pc->npx.busy_start=pc->cpu->clock;
-            pc->npx.busy_cycles=latency(op,mr);
-        }
-    }
+    pc_npx_t *b=&pc->npx;
+    unsigned clocks=b->timing ? latency(b->core.model,op,mr) : 0;
+    int done=e87_cpu_control(execution_state(b,clocks),op,mr,ax);
+    if (done && b->busy_cycles && op==0xdb && (mr==0xe0 || mr==0xe1))
+        e87_cpu_control(&b->pending,op,mr,ax);
+    if (done && clocks) begin_busy(pc,clocks);
+    if (done && op==0xdb && mr==0xe3) b->busy_cycles=0;
     update(pc);
     return done;
 }
+
 static int memory(void *ext,unsigned op,unsigned mr,int query,unsigned char *bytes)
 {
     ibmpc_t *pc=ext;
-    int done=e87_cpu_memory(&pc->npx.core,op,mr,query,bytes);
-    if (!query) update(pc);
+    pc_npx_t *b=&pc->npx;
+    if (query) return e87_cpu_memory(&b->core,op,mr,query,bytes);
+    unsigned clocks=b->timing ? latency(b->core.model,op,mr) : 0;
+    int done=e87_cpu_memory(execution_state(b,clocks),op,mr,0,bytes);
+    if (done && clocks) begin_busy(pc,clocks);
+    if (done && b->busy_cycles && ((mr>>3)&7)==6) {
+        /* FNSAVE initializes after saving the visible state. FNSTENV masks
+         * exceptions in the live CW; preserve that change across retirement. */
+        if (op==0xdd) b->busy_cycles=0;
+        if (op==0xd9) b->pending.control=b->core.control;
+    }
+    update(pc);
     return done;
 }
 static void address(void *ext,const e86_npx_address_t *a)
 {
     ibmpc_t *pc=ext;
-    e87_cpu_address(&pc->npx.core,a);
+    e87_cpu_address(pc->npx.busy_cycles ? &pc->npx.pending : &pc->npx.core,a);
 }
 static int event(void *ext,unsigned event)
 {
     ibmpc_t *pc=ext;
     int result=0;
+    if (event==E86_NPX_TIMED_TRANSFERS) return pc->npx.timing && pc->npx.core.model==E87_80287;
+    unsigned executing=timed_busy(pc);
     /* IBM AT wires ERROR to IRQ13, not the processor's #16 input. */
     if (event==E86_NPX_ERROR) return 0;
     if (event==E86_NPX_WAIT || event==E86_NPX_OVERRUN)
@@ -106,8 +180,9 @@ static int event(void *ext,unsigned event)
             (mr<0xc0 && (op==0xd9 || op==0xdd) && ((mr>>3)&7)>=6);
         /* Error-recovery controls remain usable. A transfer-overrun stall is
          * different and still needs FNINIT/hardware reset. */
-        return pc->npx.core.transfer_blocked || (!no_wait &&
-            (timed_busy(pc) || pc->npx.busy_latch || (pc->npx.core.model==E87_8087 && pc->npx.error)));
+        return pc->npx.core.transfer_blocked ||
+            (executing && op==0xdb && (mr==0xe2 || mr==0xe4)) || (!no_wait &&
+            (executing || pc->npx.busy_latch || (pc->npx.core.model==E87_8087 && pc->npx.error)));
     }
     return result;
 }
@@ -117,6 +192,7 @@ void pc_npx_check_stop(ibmpc_t *pc)
 {
     pc_npx_t *b=&pc->npx;
     e8086_t *c=pc->cpu;
+    if (b->busy_cycles) timed_busy(pc);
     if (!b->enabled || !(c->state & E86_STATE_NPX_STOP)) {
         b->stop_reported=0;
         return;
@@ -154,13 +230,17 @@ void pc_npx_init(ibmpc_t *pc,unsigned model)
     if (!model) return;
     pc->npx.enabled=1;
     ini_get_uint16(ini_next_sct(pc->cfg,NULL,"npx"),"timing",&pc->npx.timing,model==2);
-    if(model!=2)pc->npx.timing=0;
+    if(model==2)
+        ini_get_uint32(ini_next_sct(pc->cfg,NULL,"npx"),"clock_hz",&pc->npx.clock_hz,0);
+
     e87_init(&pc->npx.core,model==1 ? E87_8087 : E87_80287);
     e86_set_npx_control(pc->cpu,pc,control);
     e86_set_npx_memory(pc->cpu,memory);
     e86_set_npx_address(pc->cpu,address);
     e86_set_npx_event(pc->cpu,event);
-    pce_log(MSG_INF,"NPX:      timing=%u (partial 287 typical-cycle profile, CPU clock 1:1)\n",(unsigned)pc->npx.timing);
+    if (pc->npx.timing && pc->npx.clock_hz)
+        pce_log(MSG_INF,"NPX:      timing=1 clock_hz=%lu (motherboard tick resolution)\n",pc->npx.clock_hz);
+    else pce_log(MSG_INF,"NPX:      timing=%u (partial execution timing, CPU clock 1:1)\n",(unsigned)pc->npx.timing);
     if (model==1) {
         pc->ppi_port_a[0] |= 2;
         pc->ppi_port_c[0] |= 2;
@@ -175,6 +255,7 @@ void pc_npx_write(ibmpc_t *pc,unsigned port,unsigned val)
         b->nmi_enabled=(val&0x80)!=0;
         update(pc);
     } else if (b->core.model==E87_80287) {
+        timed_busy(pc);
         if (port==0xf0) {
             b->busy_latch=0;
             e8259_set_irq5(&pc->pic2,0);

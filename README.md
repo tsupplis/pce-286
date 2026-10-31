@@ -179,14 +179,25 @@ stop. This diagnostic identifies an unsupported instruction or operand case;
 it is distinct from a guest numeric exception or a normal WAIT.
 
 The 80287 defaults to `timing = 1`: a partial typical-cycle profile for
-register arithmetic, square root and transcendental instructions. Set
+register and memory-operand arithmetic, square root and transcendental instructions. Set
 `npx { model = "80287" timing = 0 }` for the previous functional timing.
-One modeled NPX clock equals one emulated CPU clock; this is not a historical
-AT clock-ratio model. Integer execution can overlap NPX occupancy; WAIT and
-checking numeric instructions wait for it. Results and errors are still
-committed synchronously, and no-wait controls can observe them immediately.
-Memory-form execution costs, transfer cycles, operand-dependent timing and
-exception penalties are not yet modeled. The 8087 retains functional timing.
+By default each NPX clock follows one emulated CPU clock. To select a fixed
+4 MHz execution clock, add `clock_hz = 4000000` inside the 80287 NPX section.
+With timing enabled, a positive frequency uses emulated motherboard time across
+CPU speed changes. Each instruction duration rounds up to a whole PIT tick
+(about 0.84 microseconds). A zero frequency selects the default. Integer execution can overlap NPX occupancy; WAIT and
+checking numeric instructions wait for it. Timed arithmetic publishes its result and exception state at the modeled
+completion deadline. FNSTSW during execution reports BUSY with the prior
+status. The board raises IRQ13 for a newly signalled error at completion.
+With 80287 timing enabled, each operand word transferred between the NPX and
+memory occupies four CPU clocks at an even physical address or six at an odd
+address. The emulator accounts for these zero-wait-state bus cycles together
+at the ESC instruction. Memory wait states, bus arbitration, individual
+PEREQ/PEACK transfers, operand-dependent execution and exception penalties
+remain open. On an XT, `npx { model = "8087" timing = 1 }` enables
+representative CPU-clock durations for register add, subtract, multiply,
+divide and square root. Other XT forms retain functional timing. The
+8087 defaults to timing disabled.
 This profile improves pacing but does not make benchmark MHz hardware-accurate.
 
 XT presence is reported through the equipment switches; errors use NMI with

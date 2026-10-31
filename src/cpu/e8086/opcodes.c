@@ -4397,6 +4397,14 @@ unsigned op_d8 (e8086_t *c)
         if (direction == 2 && completion == 1)
             for (i = 0; i < size; ++i)
                 e86_set_mem8_sreg(c, reg, c->ea.ofs + i, bytes[i]);
+        /* Intel 286/287 PRM, Bus Transfers (2-22/23). Each operand word
+         * uses one NPX bus cycle and one aligned or two odd memory cycles.
+         * Charge CPU bus time separately from concurrent NPX execution. */
+        if ((direction == 1 || completion == 1) && (c->cpu & E86_CPU_FLAGS286)
+            && c->npx_event && c->npx_event(c->npx_ext,E86_NPX_TIMED_TRANSFERS)) {
+            unsigned odd=e86_sreg_to_linear(c,reg,c->ea.ofs)&1;
+            e86_set_clk(c,(size/2)*(2+odd)*2);
+        }
     } else {
         if (c->npx_control != NULL) {
             unsigned short ax = e86_get_ax(c);
