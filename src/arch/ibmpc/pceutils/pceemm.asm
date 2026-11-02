@@ -48,6 +48,9 @@ saveint67:
 ;-----------------------------------------------------------------------------
 ; int 67 handler
 ;-----------------------------------------------------------------------------
+%ifdef PCE_BOARD_EMM
+%include "pceutils/boardemm.inc"
+%else
 int_67:
 	push	bp
 	xchg	bp, ax
@@ -55,6 +58,7 @@ int_67:
 	call	pce_hook		; PCE hook
 	pop	bp
 	iret
+%endif
 
 
 ;-----------------------------------------------------------------------------
@@ -142,7 +146,11 @@ drv_init:
 	call	pce_hook		; ems info
 	jc	.noems
 
-	test	al, 0x01		; check if ems installed
+	%ifdef PCE_BOARD_EMM
+	test al, 2
+%else
+	test	al, 0x01
+%endif		; check if ems installed
 	jnz	.emsok
 
 .noems:
@@ -151,6 +159,31 @@ drv_init:
 	jmp	.doneerr
 
 .emsok:
+%ifdef PCE_BOARD_EMM
+	; Detect an existing EMS manager by its device signature in the
+	; INT 67h handler segment before taking ownership of the page frame.
+	push es
+	push di
+	push cx
+	xor ax, ax
+	mov es, ax
+	mov ax, [es:67h*4+2]
+	mov es, ax
+	mov di, 10
+	mov si, emm_signature
+	mov cx, 8
+	cld
+	cs repe cmpsb
+	pop cx
+	pop di
+	pop es
+	jne .board_ready
+	mov si, msg_conflict
+	call prt_string
+	jmp .doneerr
+.board_ready:
+	mov dx, 1664 ; board pages 24..127 are available to DOS
+%endif
 	mov	ax, dx			; EMS size in K
 	call	prt_uint16
 
@@ -258,8 +291,17 @@ prt_uint16:
 	ret
 
 
+%ifdef PCE_BOARD_EMM
+emm_signature: db "EMMXXXX0"
+msg_conflict: db "Existing EMS manager installed",13,10,0
+%endif
+
 msg_init:
+	%ifdef PCE_BOARD_EMM
+	db "PCEEEMM: board EMS driver ", PCE_VERSION_STR
+%else
 	db	"EMS: PCE EMS driver version ", PCE_VERSION_STR
+%endif
 	db	0x0d, 0x0a, 0x00
 
 msg_nopce:

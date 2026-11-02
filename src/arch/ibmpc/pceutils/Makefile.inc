@@ -30,6 +30,7 @@ PCEUTILS_BAS_COM := \
 
 PCEUTILS_BAS_SYS := \
 	pceclock \
+	pceeemm \
 	pceemm \
 	pcehimem \
 
@@ -52,6 +53,8 @@ endif
 
 
 $(rel)/pceclock.sys:	$(rel)/pceclock.asm $(PCEUTILS_SDP)
+$(rel)/pceeemm.sys: $(rel)/pceeemm.asm $(rel)/pceemm.asm $(rel)/boardemm.inc $(PCEUTILS_SDP)
+DIST += $(rel)/boardemm.inc
 $(rel)/pceemm.sys:	$(rel)/pceemm.asm $(PCEUTILS_SDP)
 $(rel)/pceexit.com:	$(rel)/pceexit.asm $(PCEUTILS_SDP)
 $(rel)/pcehimem.sys:	$(rel)/pcehimem.asm $(PCEUTILS_SDP)

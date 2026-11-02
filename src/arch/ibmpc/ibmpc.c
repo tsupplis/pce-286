@@ -196,6 +196,9 @@ unsigned char pc_get_port8 (ibmpc_t *pc, unsigned long addr)
 {
 	unsigned char val;
 
+	if (pc->eems && (addr == 0x218 || addr == 0x219 || addr == 0x4219))
+		return eems_read (pc->eems, addr);
+
 	if (m24_get_port8 (pc, addr, &val) == 0) {
 		return (val);
 	}
@@ -320,6 +323,11 @@ void pc_set_port8 (ibmpc_t *pc, unsigned long addr, unsigned char val)
 #ifdef DEBUG_PORTS
 	pc_log_deb ("set port 8 %04lX <- %02X\n", addr, val);
 #endif
+
+	if (pc->eems && (addr == 0x218 || addr == 0x219)) {
+		eems_write (pc->eems, addr, val);
+		return;
+	}
 
 	if (m24_set_port8 (pc, addr, val) == 0) {
 		return;
@@ -2443,6 +2451,7 @@ void pc_cmos_populate_from_config (ibmpc_t *pc)
 
 	/* --- Base memory (conventional RAM, max 640 KB) --- */
 	base_kb = (pc->ram != NULL) ? (mem_blk_get_size (pc->ram) / 1024UL) : 640UL;
+	if (pc->eems) base_kb = 640;
 	if (base_kb > 640UL) { base_kb = 640UL; }
 	d[0x15] = (unsigned char)(base_kb & 0xff);
 	d[0x16] = (unsigned char)((base_kb >> 8) & 0xff);
@@ -2619,6 +2628,7 @@ ibmpc_t *pc_new (ini_sct_t *ini)
 	}
 
 	pc->cfg = ini;
+	pc->eems = NULL;
 	memset (&pc->npx, 0, sizeof pc->npx);
 
 	pc->disk_id = 0;
@@ -2664,6 +2674,17 @@ ibmpc_t *pc_new (ini_sct_t *ini)
 	pc_setup_parport (pc, ini);
 	pc_setup_ems (pc, ini);
 	pc_setup_xms (pc, ini);
+	if (ini_next_sct (ini, NULL, "eems") != NULL) {
+		mem_blk_t *base = mem_get_blk (pc->mem, 0);
+		int dos_frame;
+		ini_get_bool (ini_next_sct (ini, NULL, "eems"), "dos_frame", &dos_frame, 0);
+		if ((pc->model & PCE_IBMPC_5170) && base && base->size == 0x40000)
+			pc->eems = eems_attach (pc->mem, dos_frame);
+		if (pc->eems == NULL)
+			pce_log (MSG_ERR, "*** EEMS requires AT, 256K base RAM and free 256-640K windows\n");
+		else
+			pce_log (MSG_INF, "EEMS:     2048K at 0218h, conventional windows 4000h-9fffh\n");
+	}
 	pc_setup_at_rtc (pc, ini);   /* AT: CMOS/RTC — no-op for 5150/5160 */
 	pc_setup_covox (pc, ini);
 
@@ -2721,6 +2742,7 @@ void pc_del (ibmpc_t *pc)
 	atari_pc_del (pc);
 
 	pc_del_xms (pc);
+	eems_detach (pc->eems);
 	pc_del_ems (pc);
 	pc_del_parport (pc);
 	pc_del_serport (pc);
@@ -2968,6 +2990,7 @@ void pc_reset (ibmpc_t *pc)
 	}
 
 	pc_npx_reset (pc);
+	if (pc->eems) eems_reset (pc->eems);
 
 	/* Reset the keyboard controller only on an AT motherboard. */
 	if (PC_HAS_8042 (pc)) {

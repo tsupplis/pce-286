@@ -22,6 +22,7 @@
 
 #include "main.h"
 #include "ems.h"
+#include <string.h>
 
 #include <stdlib.h>
 
@@ -933,5 +934,118 @@ void ems_handler (ems_t *ems, e8086_t *cpu)
 		);
 		e86_set_ah (cpu, 0x84);
 		break;
+	}
+}
+
+/* One 2 MiB ISA board at 0218h, configured for 256 KiB motherboard RAM.
+ * The selector enables mapping with bit 7. Without a mapped page the
+ * conventional windows expose the board's linear power-on configuration.
+ * Only the 256-640 KiB application area is wired in this configuration. */
+enum { EEMS_PAGE_SIZE = 0x4000, EEMS_FIRST = 16, EEMS_WINDOWS = 24 };
+
+struct eems_board {
+	memory_t *memory;
+	mem_blk_t *window[EEMS_WINDOWS + 4];
+	unsigned windows;
+	unsigned char unmapped[EEMS_PAGE_SIZE];
+	unsigned char selector, map[64];
+	unsigned char ram[128 * EEMS_PAGE_SIZE];
+};
+
+static void eems_update_window (eems_board_t *board, unsigned window)
+{
+	unsigned slot = window < EEMS_WINDOWS ? EEMS_FIRST + window : 56 + window - EEMS_WINDOWS;
+	unsigned entry = board->map[slot];
+	if (window >= EEMS_WINDOWS) {
+		int enabled = (board->selector & entry & 0x80) != 0;
+		mem_blk_set_data (board->window[window], enabled ?
+			board->ram + (entry & 127) * EEMS_PAGE_SIZE : board->unmapped, 0);
+		board->window[window]->readonly = !enabled;
+		return;
+	}
+	unsigned page = (board->selector & entry & 0x80) ? (entry & 0x7f) : window;
+	mem_blk_set_data (board->window[window], board->ram + page * EEMS_PAGE_SIZE, 0);
+}
+
+void eems_reset (eems_board_t *board)
+{
+	unsigned i;
+	board->selector = 0;
+	memset (board->map, 0, sizeof board->map);
+	for (i = 0; i < board->windows; i++) eems_update_window (board, i);
+}
+
+void eems_detach (eems_board_t *board)
+{
+	unsigned i;
+	if (board == NULL) return;
+	for (i = 0; i < board->windows; i++) {
+		if (board->window[i] != NULL) {
+			mem_rmv_blk (board->memory, board->window[i]);
+			mem_blk_del (board->window[i]);
+		}
+	}
+	free (board);
+}
+
+int eems_has_dos_frame (const eems_board_t *board)
+{
+	return board != NULL && board->windows == EEMS_WINDOWS + 4;
+}
+
+eems_board_t *eems_attach (memory_t *memory, int dos_frame)
+{
+	unsigned i;
+	eems_board_t *board = calloc (1, sizeof *board);
+	if (board == NULL) return NULL;
+	board->memory = memory;
+	board->windows = EEMS_WINDOWS + (dos_frame ? 4 : 0);
+	memset (board->unmapped, 0xff, sizeof board->unmapped);
+	for (i = 0; i < board->windows; i++) {
+		unsigned long addr = (EEMS_FIRST + i) * EEMS_PAGE_SIZE;
+		unsigned j;
+		if (i >= EEMS_WINDOWS)
+			addr = 0xe0000UL + (i - EEMS_WINDOWS) * EEMS_PAGE_SIZE;
+		for (j = 0; j < memory->cnt; j++) {
+			mem_blk_t *other = memory->lst[j].blk;
+			if (other->active && other->addr1 < addr + EEMS_PAGE_SIZE && other->addr2 >= addr)
+				goto failure;
+		}
+		board->window[i] = mem_blk_new (addr, EEMS_PAGE_SIZE, 0);
+		if (board->window[i] == NULL) goto failure;
+		eems_update_window (board, i);
+		mem_add_blk (memory, board->window[i], 0);
+		if (mem_get_blk (memory, addr) != board->window[i]) goto failure;
+	}
+	return board;
+failure:
+	eems_detach (board);
+	return NULL;
+}
+
+unsigned char eems_read (eems_board_t *board, unsigned long port)
+{
+	if (port == 0x4219) return 4; /* start of board RAM at segment 4000h */
+	if (port == 0x219) return board->selector;
+	return board->map[board->selector & 63];
+}
+
+void eems_write (eems_board_t *board, unsigned long port, unsigned char value)
+{
+	unsigned slot = board->selector & 63;
+	if (port == 0x219) {
+		unsigned changed = board->selector ^ value;
+		board->selector = value;
+		if (changed & 0x80) {
+			unsigned i;
+			for (i = 0; i < board->windows; i++) eems_update_window (board, i);
+		}
+	}
+	else {
+		board->map[slot] = value;
+		if (slot >= EEMS_FIRST && slot < EEMS_FIRST + EEMS_WINDOWS)
+			eems_update_window (board, slot - EEMS_FIRST);
+		else if (eems_has_dos_frame (board) && slot >= 56 && slot < 60)
+			eems_update_window (board, EEMS_WINDOWS + slot - 56);
 	}
 }

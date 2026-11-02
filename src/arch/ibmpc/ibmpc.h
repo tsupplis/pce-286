@@ -199,6 +199,7 @@ typedef struct ibmpc_t {
 	unsigned char      atari_pc_switches;
 	unsigned char      atari_pc_rtc_port;
 	mc146818a_t        *atari_pc_rtc;
+	eems_board_t       *eems;
 } ibmpc_t;
 
 

@@ -240,3 +240,28 @@ run by the ordinary check targets.
 
 have fun
 Hampa Hug <hampa@hampa.ch>
+
+
+### MS-DOS driver for the PCE EEMS board
+
+On the 5170/80286, set the conventional RAM block and board in the machine configuration:
+
+```ini
+ram { address = 0 size = 256K }
+eems { dos_frame = 1 }
+```
+
+The board supplies the remaining 384 KB of conventional RAM. Reserve E0000h–EFFFFh
+for the four DOS page-frame windows and omit the software `ems {}` pool. Copy
+`src/arch/ibmpc/pceutils/pceeemm.sys` to the DOS disk and load it in CONFIG.SYS:
+
+```dos
+DEVICE=C:\PCE\PCEEEMM.SYS
+```
+
+Use one EMS manager. PCEEEMM exposes 104 board pages (1664 KB) through INT 67h.
+It implements status/version, frame address, page counts, allocation, mapping,
+release, map save/restore and handle enumeration (40h–48h and 4Bh–4Dh).
+AST-specific enhanced manager calls and multitasker context services are outside
+this driver's current interface. The CDOS XM internal driver uses the board
+directly and can use the default `eems {}` profile.

@@ -497,6 +497,8 @@ static
 void pc_hook_ems_info (ibmpc_t *pc)
 {
 	ems_info (pc->ems, pc->cpu);
+	if (eems_has_dos_frame (pc->eems))
+		e86_set_al (pc->cpu, e86_get_al (pc->cpu) | 2);
 	pc_hook_set_result (pc, 0);
 }
 

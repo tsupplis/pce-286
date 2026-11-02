@@ -55,6 +55,15 @@ typedef struct {
 } ems_t;
 
 
+/* CDOS XM ISA bank board, 256 KiB fixed RAM plus 24 conventional windows. */
+typedef struct eems_board eems_board_t;
+eems_board_t *eems_attach (memory_t *memory, int dos_frame);
+int eems_has_dos_frame (const eems_board_t *board);
+void eems_detach (eems_board_t *board);
+void eems_reset (eems_board_t *board);
+unsigned char eems_read (eems_board_t *board, unsigned long port);
+void eems_write (eems_board_t *board, unsigned long port, unsigned char value);
+
 ems_t *ems_new (ini_sct_t *sct);
 
 void ems_del (ems_t *ems);
