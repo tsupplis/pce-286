@@ -77,6 +77,45 @@ static void workload(unsigned m){
  c=setup(m);step(c,1);c->ip=0xffff;ram[0x1ffff]=0x3e;ram[0x10000]=0x67;
  step(c,1);check("code immediate wraps within CS",c->ip==1&&e86_get_al(c)==0x67);e86_del(c);
 }
+/* CPU INTR input with an acknowledge callback supplying vector 20h. */
+static void hybrid_irq(void)
+{
+ static const unsigned char guest[] = {
+  0xaf,       /* XOR A sets Z and parity, clears carry and N */
+  0xfb,       /* EI */
+  0x00,       /* NOP in the EI shadow */
+  0x3c,       /* INC A must run exactly once after IRET */
+  0xed, 0xfd  /* RETEM */
+ };
+ e8086_t *c = setup(1);
+ e86_set_upd9002(c);
+ memcpy(ram + 0x10100, guest, sizeof guest);
+ vector(0x20, 0, 0x500);
+ ram[0x500] = 0xf9; /* STC clobbers live carry in native mode */
+ ram[0x501] = 0xcf; /* IRET */
+ c->inta = inta;
+ step(c, 1); /* BRKEM */
+ e86_irq(c, 1);
+ step(c, 1);
+ check("hybrid IRQ masked before EI", c->ip == 0x101 && c->irq);
+ step(c, 1);
+ check("hybrid EI shadow", c->ip == 0x102 && c->irq);
+ step(c, 1);
+ check("hybrid external vector", e86_get_cs(c) == 0 && c->ip == 0x500 &&
+       (c->flg & 0x8000) && !e86_get_if(c) && !c->irq);
+ check("hybrid IRQ stack frame", e86_get_sp(c) == 0x7ff4 &&
+       rw(0, 0x37ff4) == 0x103 && rw(0, 0x37ff6) == 0x1000 &&
+       (rw(0, 0x37ff8) & 0x82ff) == 0x0244);
+ step(c, 2);
+ check("hybrid IRET restores mode, flags and PC", c->ip == 0x103 &&
+       e86_get_cs(c) == 0x1000 && (c->flg & 0x82ff) == 0x0244 &&
+       e86_get_sp(c) == 0x7ffa);
+ step(c, 2);
+ check("hybrid resumes and returns to caller", e86_get_al(c) == 1 &&
+       e86_get_cs(c) == 0 && c->ip == 0x103 && (c->flg & 0x8000) &&
+       e86_get_sp(c) == 0x8000);
+ e86_del(c);
+}
 static int hybrid_probe(const char *path)
 {
  unsigned steps;
@@ -95,6 +134,7 @@ static int hybrid_probe(const char *path)
  c->ip = 0x7c00;
  for (steps = 0; steps < 128 && !(c->state & E86_STATE_HALT); steps++)
   e86_execute(c);
+ hybrid_irq();
  check("upd9002 transition probe", (c->state & E86_STATE_HALT) &&
        e86_get_ax(c) == 0x9002 && e86_get_sp(c) == 0x7000);
  printf("upd9002 probe: %u steps, AX=%04x, SP=%04x\n", steps, e86_get_ax(c), e86_get_sp(c));
