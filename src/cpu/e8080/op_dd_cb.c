@@ -92,7 +92,7 @@ static void op_dd_cb_1e (e8080_t *c)
 	e8080_set_clk (c, 4, 23);
 }
 
-/* OP DD CB xx 26: SLA (IX+d) */
+/* Opcodes 26h and 36h: SLA and SLL (IX+d). SLL sets bit zero. */
 static void op_dd_cb_26 (e8080_t *c)
 {
 	unsigned      p;
@@ -100,7 +100,7 @@ static void op_dd_cb_26 (e8080_t *c)
 
 	p = e8080_get_ixd (c, 2);
 	s = e8080_get_mem8 (c, p);
-	d = s << 1;
+	d = (s << 1) | (c->inst[3] == 0x36);
 	e8080_set_mem8 (c, p, d);
 	z80_set_psw_rot (c, d, s & 0x80);
 	e8080_set_clk (c, 4, 23);
@@ -184,7 +184,7 @@ static e8080_opcode_f opcodes_dd_cb[256] = {
 	op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_1e, op_dd_cb_ud,
 	op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_26, op_dd_cb_ud, /* 20 */
 	op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_2e, op_dd_cb_ud,
-	op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, /* 30 */
+	op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_26, op_dd_cb_ud, /* 30 */
 	op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_3e, op_dd_cb_ud,
 	op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_46, op_dd_cb_ud, /* 40 */
 	op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_ud, op_dd_cb_46, op_dd_cb_ud,

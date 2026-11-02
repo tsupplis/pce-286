@@ -323,7 +323,8 @@ static void op_fd_70 (e8080_t *c)
 /* OP FD 84: ADD A, IYH */
 static void op_fd_84 (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyh (c);
@@ -336,7 +337,8 @@ static void op_fd_84 (e8080_t *c)
 /* OP FD 85: ADD A, IYL */
 static void op_fd_85 (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyl (c);
@@ -364,7 +366,8 @@ static void op_fd_86 (e8080_t *c)
 /* OP FD 8C: ADC A, IYH */
 static void op_fd_8c (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyh (c);
@@ -377,7 +380,8 @@ static void op_fd_8c (e8080_t *c)
 /* OP FD 8D: ADC A, IYL */
 static void op_fd_8d (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyl (c);
@@ -405,7 +409,8 @@ static void op_fd_8e (e8080_t *c)
 /* OP FD 94: SUB A, IYH */
 static void op_fd_94 (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyh (c);
@@ -418,7 +423,8 @@ static void op_fd_94 (e8080_t *c)
 /* OP FD 95: SUB A, IYL */
 static void op_fd_95 (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyl (c);
@@ -446,7 +452,8 @@ static void op_fd_96 (e8080_t *c)
 /* OP FD 9C: SBC A, IYH */
 static void op_fd_9c (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyh (c);
@@ -459,7 +466,8 @@ static void op_fd_9c (e8080_t *c)
 /* OP FD 9D: SBC A, IYL */
 static void op_fd_9d (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyl (c);
@@ -595,7 +603,8 @@ static void op_fd_b6 (e8080_t *c)
 /* OP FD BC: CP A, IYH */
 static void op_fd_bc (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyh (c);
@@ -607,7 +616,8 @@ static void op_fd_bc (e8080_t *c)
 /* OP FD BD: CP A, IYL */
 static void op_fd_bd (e8080_t *c)
 {
-	unsigned char d, s1, s2;
+	unsigned d;
+	unsigned char s1, s2;
 
 	s1 = e8080_get_a (c);
 	s2 = e8080_get_iyl (c);

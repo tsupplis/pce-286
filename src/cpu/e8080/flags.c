@@ -282,7 +282,7 @@ void z80_set_psw_add16_2 (e8080_t *c, unsigned long d, unsigned s1, unsigned s2)
 		c->psw |= E8080_FLG_C;
 	}
 
-	if ((s1 ^ d) & (s1 ^ s2) & 0x8000) {
+	if ((d ^ s1) & (d ^ s2) & 0x8000) {
 		c->psw |= E8080_FLG_P;
 	}
 
