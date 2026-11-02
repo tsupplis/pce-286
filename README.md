@@ -33,6 +33,19 @@ All credit for PCE goes to Hampa.
 - **MS-DOS 6.22:** `eems { dos_frame = 1 }` with `PCEEEMM.SYS`. Verified all 104 allocatable pages (1,664 KiB) on XT and AT.
 - Documented [board and driver configuration](src/arch/ibmpc/pce-ibmpc.cfg.in) alongside the existing software EMS option.
 
+### Idle CPU usage
+
+PCE skips redundant clock checks while a native CPU is halted. For single-task real-mode DOS, run `PCEIDLE.COM` from AUTOEXEC.BAT to halt during DOS idle calls and wake on interrupts.
+
+| Idle guest, speed 24, null display/audio | Host CPU (% of one core) |
+|---|---:|
+| MS-DOS 6.22 prompt, XT | 28.6% |
+| MS-DOS 6.22 prompt, XT with PCEIDLE | 6.1% |
+| Concurrent DOS XM 6.21, XT, four idle consoles | 29.0% with `IDLE=ON`, 32.2% with `IDLE=OFF` |
+| OS/2 1.3 desktop, AT | 31.4% |
+
+Single-host samples: 10 seconds for DOS and CDOS, 15 seconds for OS/2. Guest clock advancement and keyboard response verified on DOS and CDOS. [Measurement procedure](doc/host-debugging.md)
+
 ## Documentation
 
 [Documentation index](doc/index.md) · [IBM XT](doc/ibmxt-config.md) · [IBM AT](doc/ibmat-config.md) · [Memory](doc/ibmpc-memory.md) · [Disks](doc/disk-creation.md) · [Testing](doc/testing.md)
