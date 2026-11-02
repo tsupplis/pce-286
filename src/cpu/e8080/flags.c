@@ -200,6 +200,7 @@ void z80_set_psw_rot (e8080_t *c, unsigned char val, int cf)
 	if (cf) {
 		c->psw |= E8080_FLG_C;
 	}
+	z80_set_xy (c, val);
 }
 
 void z80_set_psw_inc (e8080_t *c, unsigned char val)
@@ -215,6 +216,7 @@ void z80_set_psw_inc (e8080_t *c, unsigned char val)
 	if (val == 0x7f) {
 		c->psw |= E8080_FLG_P;
 	}
+	z80_set_xy (c, val + 1);
 }
 
 void z80_set_psw_dec (e8080_t *c, unsigned char val)
@@ -232,6 +234,7 @@ void z80_set_psw_dec (e8080_t *c, unsigned char val)
 	}
 
 	c->psw |= E8080_FLG_N;
+	z80_set_xy (c, val - 1);
 }
 
 void z80_set_psw_add (e8080_t *c, unsigned d, unsigned char s1, unsigned char s2)
@@ -251,6 +254,7 @@ void z80_set_psw_add (e8080_t *c, unsigned d, unsigned char s1, unsigned char s2
 	if ((s1 ^ s2 ^ d) & 0x10) {
 		c->psw |= E8080_FLG_A;
 	}
+	z80_set_xy (c, d);
 }
 
 void z80_set_psw_add16 (e8080_t *c, unsigned long d, unsigned s1, unsigned s2)
@@ -264,6 +268,7 @@ void z80_set_psw_add16 (e8080_t *c, unsigned long d, unsigned s1, unsigned s2)
 	if ((s1 ^ s2 ^ d) & 0x1000) {
 		c->psw |= E8080_FLG_A;
 	}
+	z80_set_xy (c, d >> 8);
 }
 
 void z80_set_psw_add16_2 (e8080_t *c, unsigned long d, unsigned s1, unsigned s2)
@@ -289,6 +294,7 @@ void z80_set_psw_add16_2 (e8080_t *c, unsigned long d, unsigned s1, unsigned s2)
 	if ((s1 ^ s2 ^ d) & 0x1000) {
 		c->psw |= E8080_FLG_A;
 	}
+	z80_set_xy (c, d >> 8);
 }
 
 void z80_set_psw_sub (e8080_t *c, unsigned d, unsigned char s1, unsigned char s2)
@@ -310,6 +316,7 @@ void z80_set_psw_sub (e8080_t *c, unsigned d, unsigned char s1, unsigned char s2
 	}
 
 	c->psw |= E8080_FLG_N;
+	z80_set_xy (c, d);
 }
 
 void z80_set_psw_sub16_2 (e8080_t *c, unsigned long d, unsigned s1, unsigned s2)
@@ -337,4 +344,5 @@ void z80_set_psw_sub16_2 (e8080_t *c, unsigned long d, unsigned s1, unsigned s2)
 	}
 
 	c->psw |= E8080_FLG_N;
+	z80_set_xy (c, d >> 8);
 }

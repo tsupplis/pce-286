@@ -272,7 +272,8 @@ static void op_cb_40 (e8080_t *c)
 	r = c->inst[1] & 7;
 	s = e8080_get_reg8 (c, r);
 	d = s & (1 << b);
-	e8080_set_psw_szp (c, d, E8080_FLG_A | E8080_FLG_3 | E8080_FLG_5, E8080_FLG_N);
+	e8080_set_psw_szp (c, d, E8080_FLG_A, E8080_FLG_N);
+	z80_set_xy (c, s);
 	e8080_set_clk (c, 2, 8);
 }
 

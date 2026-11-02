@@ -27,6 +27,13 @@
 #include "e8080.h"
 
 
+/* Z80 F3 and F5 copy the corresponding bits of an instruction-specific byte. */
+static inline void z80_set_xy (e8080_t *c, unsigned value)
+{
+	const unsigned mask = E8080_FLG_3 | E8080_FLG_5;
+	c->psw = (c->psw & ~mask) | (value & mask);
+}
+
 /* An INTA instruction consumes bus bytes, not bytes at PC. */
 #define e8080_next_pc(c, n) (((c)->pc + ((c)->inta_active ? 0 : (n))) & 0xffff)
 static inline unsigned char e8080_inst_byte (e8080_t *c, unsigned n)

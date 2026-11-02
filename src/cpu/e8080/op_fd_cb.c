@@ -144,7 +144,8 @@ static void op_fd_cb_46 (e8080_t *c)
 	p = e8080_get_iyd (c, 2);
 	s = e8080_get_mem8 (c, p);
 	d = s & (1 << b);
-	e8080_set_psw_szp (c, d, E8080_FLG_A | E8080_FLG_3 | E8080_FLG_5, E8080_FLG_N);
+	e8080_set_psw_szp (c, d, E8080_FLG_A, E8080_FLG_N);
+	z80_set_xy (c, p >> 8);
 	e8080_set_clk (c, 4, 20);
 }
 

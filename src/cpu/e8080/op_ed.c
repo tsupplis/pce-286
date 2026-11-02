@@ -284,6 +284,7 @@ static void op_ed_67 (e8080_t *c)
 	e8080_set_a (c, a);
 	e8080_set_mem8 (c, e8080_get_hl (c), d);
 	e8080_set_psw_szp (c, a, 0, E8080_FLG_A | E8080_FLG_N);
+	z80_set_xy (c, a);
 	e8080_set_clk (c, 2, 18);
 }
 
@@ -324,6 +325,7 @@ static void op_ed_6f (e8080_t *c)
 	e8080_set_a (c, a);
 	e8080_set_mem8 (c, e8080_get_hl (c), d);
 	e8080_set_psw_szp (c, a, 0, E8080_FLG_A | E8080_FLG_N);
+	z80_set_xy (c, a);
 	e8080_set_clk (c, 2, 18);
 }
 
@@ -392,6 +394,12 @@ static void op_ed_7b (e8080_t *c)
 	e8080_set_clk (c, 4, 20);
 }
 
+/* Block instructions copy bit 3 directly, but route bit 1 into F5. */
+static void z80_set_block_xy (e8080_t *c, unsigned value)
+{
+	z80_set_xy (c, (value & E8080_FLG_3) | ((value & 2) << 4));
+}
+
 /* OP ED A0: LDI */
 static void op_ed_a0 (e8080_t *c)
 {
@@ -404,6 +412,7 @@ static void op_ed_a0 (e8080_t *c)
 	e8080_set_hl (c, e8080_get_hl (c) + 1);
 	e8080_set_de (c, e8080_get_de (c) + 1);
 	e8080_set_bc (c, n);
+	z80_set_block_xy (c, e8080_get_a (c) + s);
 	e8080_set_flag (c, E8080_FLG_A | E8080_FLG_P | E8080_FLG_N, 0);
 	e8080_set_pf (c, n != 0);
 	e8080_set_clk (c, 2, 16);
@@ -424,6 +433,7 @@ static void op_ed_a1 (e8080_t *c)
 	e8080_set_psw_szp (c, d, E8080_FLG_N, 0);
 	e8080_set_pf (c, n != 0);
 	e8080_set_af (c, (d ^ s1 ^ s2) & 0x10);
+	z80_set_block_xy (c, d - e8080_get_af (c));
 	e8080_set_clk (c, 2, 16);
 }
 
@@ -469,6 +479,7 @@ static void op_ed_a8 (e8080_t *c)
 	e8080_set_hl (c, e8080_get_hl (c) - 1);
 	e8080_set_de (c, e8080_get_de (c) - 1);
 	e8080_set_bc (c, n);
+	z80_set_block_xy (c, e8080_get_a (c) + s);
 	e8080_set_flag (c, E8080_FLG_A | E8080_FLG_P | E8080_FLG_N, 0);
 	e8080_set_pf (c, n != 0);
 	e8080_set_clk (c, 2, 16);
@@ -489,6 +500,7 @@ static void op_ed_a9 (e8080_t *c)
 	e8080_set_psw_szp (c, d, E8080_FLG_N, 0);
 	e8080_set_pf (c, n != 0);
 	e8080_set_af (c, (d ^ s1 ^ s2) & 0x10);
+	z80_set_block_xy (c, d - e8080_get_af (c));
 	e8080_set_clk (c, 2, 16);
 }
 
@@ -534,6 +546,7 @@ static void op_ed_b0 (e8080_t *c)
 	e8080_set_hl (c, e8080_get_hl (c) + 1);
 	e8080_set_de (c, e8080_get_de (c) + 1);
 	e8080_set_bc (c, n);
+	z80_set_block_xy (c, e8080_get_a (c) + s);
 	e8080_set_flag (c, E8080_FLG_A | E8080_FLG_P | E8080_FLG_N, 0);
 
 	if (n == 0) {
@@ -559,6 +572,7 @@ static void op_ed_b1 (e8080_t *c)
 	e8080_set_psw_szp (c, d, E8080_FLG_N, 0);
 	e8080_set_pf (c, n != 0);
 	e8080_set_af (c, (d ^ s1 ^ s2) & 0x10);
+	z80_set_block_xy (c, d - e8080_get_af (c));
 
 	if ((n == 0) || (s1 == s2)) {
 		e8080_set_clk (c, 2, 16);
@@ -622,6 +636,7 @@ static void op_ed_b8 (e8080_t *c)
 	e8080_set_hl (c, e8080_get_hl (c) - 1);
 	e8080_set_de (c, e8080_get_de (c) - 1);
 	e8080_set_bc (c, n);
+	z80_set_block_xy (c, e8080_get_a (c) + s);
 	e8080_set_flag (c, E8080_FLG_A | E8080_FLG_P | E8080_FLG_N, 0);
 
 	if (n == 0) {
@@ -647,6 +662,7 @@ static void op_ed_b9 (e8080_t *c)
 	e8080_set_psw_szp (c, d, E8080_FLG_N, 0);
 	e8080_set_pf (c, n != 0);
 	e8080_set_af (c, (d ^ s1 ^ s2) & 0x10);
+	z80_set_block_xy (c, d - e8080_get_af (c));
 
 	if ((n == 0) || (s1 == s2)) {
 		e8080_set_clk (c, 2, 16);

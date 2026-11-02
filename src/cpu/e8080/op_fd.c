@@ -500,6 +500,7 @@ static void op_fd_a4 (e8080_t *c)
 	d = e8080_get_a (c) & e8080_get_iyh (c);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, E8080_FLG_A, E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 2, 8);
 }
 
@@ -511,6 +512,7 @@ static void op_fd_a5 (e8080_t *c)
 	d = e8080_get_a (c) & e8080_get_iyl (c);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, E8080_FLG_A, E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 2, 8);
 }
 
@@ -525,6 +527,7 @@ static void op_fd_a6 (e8080_t *c)
 	d = e8080_get_a (c) & e8080_get_mem8 (c, adr);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, E8080_FLG_A, E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 3, 19);
 }
 
@@ -536,6 +539,7 @@ static void op_fd_ac (e8080_t *c)
 	d = e8080_get_a (c) ^ e8080_get_iyh (c);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 2, 8);
 }
 
@@ -547,6 +551,7 @@ static void op_fd_ad (e8080_t *c)
 	d = e8080_get_a (c) ^ e8080_get_iyl (c);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 2, 8);
 }
 
@@ -561,6 +566,7 @@ static void op_fd_ae (e8080_t *c)
 	d = e8080_get_a (c) ^ e8080_get_mem8 (c, adr);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 3, 19);
 }
 
@@ -572,6 +578,7 @@ static void op_fd_b4 (e8080_t *c)
 	d = e8080_get_a (c) | e8080_get_iyh (c);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 2, 8);
 }
 
@@ -583,6 +590,7 @@ static void op_fd_b5 (e8080_t *c)
 	d = e8080_get_a (c) | e8080_get_iyl (c);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 2, 8);
 }
 
@@ -597,6 +605,7 @@ static void op_fd_b6 (e8080_t *c)
 	d = e8080_get_a (c) | e8080_get_mem8 (c, adr);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N | E8080_FLG_C);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 3, 19);
 }
 
@@ -610,6 +619,7 @@ static void op_fd_bc (e8080_t *c)
 	s2 = e8080_get_iyh (c);
 	d = s1 - s2;
 	z80_set_psw_sub (c, d, s1, s2);
+	z80_set_xy (c, s2);
 	e8080_set_clk (c, 2, 8);
 }
 
@@ -623,6 +633,7 @@ static void op_fd_bd (e8080_t *c)
 	s2 = e8080_get_iyl (c);
 	d = s1 - s2;
 	z80_set_psw_sub (c, d, s1, s2);
+	z80_set_xy (c, s2);
 	e8080_set_clk (c, 2, 8);
 }
 
@@ -637,6 +648,7 @@ static void op_fd_be (e8080_t *c)
 	s2 = e8080_get_mem8 (c, p);
 	d = s1 - s2;
 	z80_set_psw_sub (c, d, s1, s2);
+	z80_set_xy (c, s2);
 	e8080_set_clk (c, 3, 19);
 }
 
