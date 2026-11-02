@@ -46,6 +46,10 @@ PCE skips redundant clock checks while a native CPU is halted. For single-task r
 
 Single-host samples: 10 seconds for DOS and CDOS, 15 seconds for OS/2. Guest clock advancement and keyboard response verified on DOS and CDOS. [Measurement procedure](doc/host-debugging.md)
 
+### Miscellaneous
+
+- CGA selects an 8×14 font for BIOS-programmed 14-scanline text. Verified with the Compaq BIOS in 80×25 mode (640×350).
+
 ## Documentation
 
 [Documentation index](doc/index.md) · [IBM XT](doc/ibmxt-config.md) · [IBM AT](doc/ibmat-config.md) · [Memory](doc/ibmpc-memory.md) · [Disks](doc/disk-creation.md) · [Testing](doc/testing.md)

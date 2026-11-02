@@ -28,6 +28,7 @@
 #include <chipset/e6845.h>
 #include <devices/memory.h>
 #include <devices/video/cga_font.h>
+#include <devices/video/mda_font.h>
 #include <devices/video/cga.h>
 #include <drivers/video/terminal.h>
 #include <lib/log.h>
@@ -341,6 +342,11 @@ void cga_line_mode0 (cga_t *cga, unsigned row)
 	reg = cga->reg;
 	crt = &cga->crtc;
 
+	/* Some CGA-compatible BIOSes program 8x14 text (Compaq Portable).
+	 * Use the available monochrome glyph shapes with the CGA palette. */
+	unsigned glyph_height = ((e6845_get_ml (crt) & 31) == 13) ? 14 : 8;
+	const unsigned char *font = (glyph_height == 14) ? mda_font_8x14 : cga->font;
+
 	hd = e6845_get_hd (crt);
 
 	cga->video.buf_next_w = 8 * hd;
@@ -377,7 +383,7 @@ void cga_line_mode0 (cga_t *cga, unsigned row)
 		fg = cga_rgb[attr & 15];
 		bg = cga_rgb[(attr >> 4) & 15];
 
-		val = cga->font[8 * code + crt->ra];
+		val = (crt->ra < glyph_height) ? font[glyph_height * code + crt->ra] : 0;
 
 		if ((addr & amask) == caddr) {
 			val |= cmask;
