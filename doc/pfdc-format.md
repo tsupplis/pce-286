@@ -1,71 +1,87 @@
-PFDC file format (Version 4)
-============================
+# PFDC file format (Version 4)
 
 All integers are in big-endian format.
 
+## File structure
 
-File structure
---------------
-
+```text
 <file header chunk>
+```
 
 [<comment chunk>]
 
+```text
 For each sector:
 	<sector header chunk>
 	[<tags chunk>]
 	[other chunks]
 	[<data chunk>]
+```
 
+```text
 <end chunk>
+```
 
+## Chunk format
 
-Chunk format
-------------
-
+```text
 offset	size	description
+```
 
+```text
 0	4	Chunk ID
 4	4	Chunk size (n)
 8	n	Chunk data
 8+n	4	Chunk CRC
+```
 
+```text
 	- The size does not include the chunk ID, chunk size or chunk CRC
 	  fields.
+```
 
+```text
 	- The chunk CRC covers the chunk ID, chunk size and chunk data.
+```
 
+## File header chunk
 
-File header chunk
------------------
-
+```text
 offset	size	description
+```
 
+```text
 0	4	Chunk ID ('PFDC' = 0x50464443)
 4	4	Chunk size (4)
 8	2	Major version (4)
 10	2	Minor version (0)
 12	4	Chunk CRC
+```
 
+## End chunk
 
-End chunk
----------
-
+```text
 offset	size	description
+```
 
+```text
 0	4	Chunk ID ('END ')
 4	4	Chunk size (0)
 8	4	Chunk CRC (0x3d64af78)
+```
 
+## Sector header chunk
 
-Sector header chunk
--------------------
-
+```text
 offset	size	description
+```
 
+```text
 0	4	Chunk ID ('SECT')
 4	4	Chunk size (18)
+```
 
+```text
 8	2	Physical cylinder
 10	2	Physical head
 12	2	Logical cylinder
@@ -92,81 +108,109 @@ offset	size	description
 			0x4002	IBM MFM, 2000 kbit/s
 			0x0003	Apple Mac GCR, 500 kbit/s
 26	4	Chunk CRC
+```
 
+```text
 	- The physical cylinder / head / sector are the actual position
 	  of the sector on disk. The physical sector number is implied.
+```
 
+```text
 	- The logical cylinder / head / sector number are what's recorded
 	  in the sector ID.
+```
 
+```text
 	- The alternate sector flag indicates that this is the same
 	  physical sector as the one immediately preceding it.
+```
 
+```text
 	- If the sector is compressed, the <compressed sector data> byte
 	  is repeated <sector size> times to generate the sector data and
 	  no sector data chunk follows. Otherwise the
 	  <compressed sector data> byte is unused and a sector data chunk
 	  may follow.
+```
 
+## Sector data chunk
 
-Sector data chunk
------------------
-
+```text
 offset	size	description
+```
 
+```text
 0	4	Chunk ID ('DATA')
 4	4	Chunk size (n)
 8	n	Sector data
 8+n	4	Chunk CRC
+```
 
+## Comment chunk
 
-Comment chunk
--------------
-
+```text
 offset	size	description
+```
 
+```text
 0	4	Chunk ID ('TEXT')
 4	4	Chunk size
 8	n	Comment
 8+n	4	Chunk CRC
+```
 
+```text
 	- Comments should be UTF-8, with lines separated by LF (0x0a).
+```
 
+```text
 	- There can be more than one comment chunk in a file. The actual
 	  comment is the concatenation of the chunk data of all comment
 	  chunks, in the order that they appear in the file.
+```
 
+## Tags chunk
 
-Tags chunk
-----------
-
+```text
 offset	size	description
+```
 
+```text
 0	4	Chunk ID ('TAGS')
 4	4	Chunk size
 8	n	Tag data
 8+n	4	Chunk CRC
+```
 
+```text
 	- The tag data is associated with the sector in the most recent
 	  sector header chunk.
+```
 
+## CRC
 
-CRC
----
-
+```text
 	- The algorithm used is big-endian CRC-32C with generator
 	  polynomial 0x1edc6f41. The CRC value is initialized to 0.
+```
 
+```text
 	unsigned long pfdc4_crc (const unsigned char *src, unsigned cnt)
 	{
 		unsigned      i, j;
 		unsigned long crc;
+```
 
+```text
 		crc = 0;
+```
 
+```text
 		for (i = 0; i < cnt; i++) {
 			crc ^= (unsigned long) (src[i] & 0xff) << 24;
+```
 
+```text
 			for (j = 0; j < 8; j++) {
 				if (crc & 0x80000000) {
 					crc = (crc << 1) ^ 0x1edc6f41;
@@ -176,6 +220,9 @@ CRC
 				}
 			}
 		}
+```
 
+```text
 		return (crc & 0xffffffff);
 	}
+```

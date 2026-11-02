@@ -1,93 +1,106 @@
-PFI (2017-12-18)
-========================================================================
+# PFI (2017-12-18)
 
-File structure
-------------------------------------------------------------------------
+## File structure
 
+```text
 <file header chunk>
 <chunk 0>
 <chunk 1>
 ...
 <chunk n>
 <end chunk>
+```
 
 All integers are in big-endian format.
 
+## Chunk format
 
-Chunk format
-------------------------------------------------------------------------
-
+```text
 offset	size	description
+```
 
+```text
 0	4	Chunk ID
 4	4	Chunk size (n)
 8	n	Chunk data
 8+n	4	Chunk CRC
+```
 
+```text
 	- The size does not include the chunk ID, chunk size or chunk CRC
 	  fields.
+```
 
+```text
 	- The chunk CRC covers the chunk ID, chunk size and chunk data.
+```
 
+## CHUNK "PFI ": File header
 
-CHUNK "PFI ": File header
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ("PFI ")
 4	4	Size (4)
 8	4	Version (0)
 12	4	CRC
+```
 
+## CHUNK "TEXT": Comments
 
-CHUNK "TEXT": Comments
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ("TEXT")
 4	4	Size
 8	n	Data
 8+n	4	CRC
+```
 
+```text
 	- Comments should be UTF-8, with lines separated by LF (0x0a).
+```
 
+## CHUNK "TRAK": Track header
 
-CHUNK "TRAK": Track header
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ("TRAK")
 4	4	Size (12)
 8	4	Cylinder
 12	4	Head
 16	4	Clock rate
 20	4	CRC
+```
 
+```text
 	- The TRAK chunk starts a new track. All following chunks until
 	  the next TRAK chunk or until the END chunk refer to this track.
+```
 
+## CHUNK "INDX": Index list
 
-CHUNK "INDX": Index list
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ("INDX")
 4	4	Size (4*n)
 8	4	Index 1 position
 ...
 4*n+4	4	Index n position
 4*n+8	4	CRC
+```
 
+```text
 	- Index positions are in clock cycles from the beginning of the
 	  track.
+```
 
+## CHUNK "DATA": Track data
 
-CHUNK "DATA": Track data
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ("DATA")
 4	4	Size (n)
 8	n	Track data
 n+8	4	CRC
+```
 
 Track data format:
 
+```text
 00:             Invalid
 01 xx yy:       Pulse of length xxyy
 02 xx yy zz:    Pulse of length xxyyzz
@@ -97,32 +110,40 @@ Track data format:
 06 xx:          Pulse of length 02xx
 07 xx:          Pulse of length 03xx
 xx              Pulse of length xx
+```
 
+## CHUNK "END ": End chunk
 
-CHUNK "END ": End chunk
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ("END ")
 4	4	Size (0)
 8	4	CRC
+```
 
+## CRC
 
-CRC
-------------------------------------------------------------------------
-
+```text
 	- The algorithm used is big-endian CRC-32 with generator
 	  polynomial 0x1edc6f41. The CRC value is initialized to 0.
+```
 
+```text
 	unsigned long pfi_crc (const unsigned char *buf, unsigned cnt)
 	{
 		unsigned      i, j;
 		unsigned long crc;
+```
 
+```text
 		crc = 0;
+```
 
+```text
 		for (i = 0; i < cnt; i++) {
 			crc ^= (unsigned long) (buf[i] & 0xff) << 24;
+```
 
+```text
 			for (j = 0; j < 8; j++) {
 				if (crc & 0x80000000) {
 					crc = (crc << 1) ^ 0x1edc6f41;
@@ -132,6 +153,9 @@ CRC
 				}
 			}
 		}
+```
 
+```text
 		return (crc & 0xffffffff);
 	}
+```

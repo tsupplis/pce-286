@@ -1,21 +1,19 @@
-PCE Terminal Keys
-==============================================================================
+# PCE Terminal Keys
 
 The terminal recognizes one key as a special escape key. By default this is
-the ESC key, but any other key can be configured as escape key. Below, <ESC>
+the ESC key, but any other key can be configured as escape key. Below, `<ESC>`
 refers to this escape key.
 
-Key combinations starting with <ESC> are key sequences (press <ESC>,
-release <ESC>, then press the second key). This is true even if <ESC> is
+Key combinations starting with `<ESC>` are key sequences (press `<ESC>`,
+release `<ESC>`, then press the second key). This is true even if `<ESC>` is
 a key that is normally used in combination with other keys, such as Shift
 or Ctrl.
 
-
-Generic Terminal Keys
-==============================================================================
+## Generic Terminal Keys
 
 These keys apply to both PCE/ibmpc and PCE/macplus.
 
+```text
 <ESC> <ESC>	Send a single <ESC> to the emulated machine.
 <ESC> 0		Set the CPU speed to dynamic.
 <ESC> [1-8]	Set the CPU speed multiplier to [1-8].
@@ -30,30 +28,34 @@ These keys apply to both PCE/ibmpc and PCE/macplus.
 <ESC> down	Decrease the terminal scale factor.
 <ESC> left	Slow down the emulated CPU.
 <ESC> right	Speed up the emulated CPU.
+```
 
+```text
 Alt-Ctrl	Release the mouse grab.
+```
 
+```text
 Ctrl-`		Stop and fall back to the monitor.
 PrtScn		Take a screenshot.
 Pause		Quit
+```
 
+## PCE/atarist Terminal Keys
 
-PCE/atarist Terminal Keys
-==============================================================================
-
+```text
 <ESC> Tab	Switch between the normal Atari monitor and the Viking
 		monitor.
+```
 
+## PCE/ibmpc Terminal Keys
 
-PCE/ibmpc Terminal Keys
-==============================================================================
-
+```text
 <ESC> 9		Double the CPU speed
+```
 
+## PCE/macplus Terminal Keys
 
-PCE/macplus Terminal Keys
-==============================================================================
-
+```text
 <ESC> i		Simulate pressing the programmer's key on a real mac.
 <ESC> F1	Re-insert the first floppy disk (after moving a floppy to the
 		trash, this simulates re-inserting it). At the moment only the
@@ -68,11 +70,11 @@ Ctrl		Command key
 Alt		Option key
 F1		Command key
 F2		Option key
+```
 
+## List of key names
 
-List of key names
-==============================================================================
-
+```text
 ESC
 F1
 F2
@@ -89,7 +91,9 @@ F12
 PrintScreen	PrtScn
 ScrollLock	ScrLk
 Pause
+```
 
+```text
 Backquote	`
 1
 2
@@ -104,7 +108,9 @@ Backquote	`
 Minus		-
 Equal		=
 Backspace
+```
 
+```text
 Tab
 q
 w
@@ -119,7 +125,9 @@ p
 LeftBracket	[
 RightBracket	]
 Return
+```
 
+```text
 CapsLock
 a
 s
@@ -134,7 +142,9 @@ Semicolon	;
 Quote
 Apostrophe	'
 Backslash	\
+```
 
+```text
 ShiftLeft	Shift
 Less		<
 z
@@ -147,7 +157,9 @@ m
 Comma		,
 Period		.
 Slash		/
+```
 
+```text
 CtrlLeft	Ctrl
 SuperLeft	StartLeft	WindowsLeft
 AltLeft		Alt
@@ -156,7 +168,9 @@ AltRight
 SuperRight	StartRight	WindowsRight
 Menu
 CtrlRight
+```
 
+```text
 NumLock
 KP_Slash
 KP_Star
@@ -174,7 +188,9 @@ KP_3
 KP_Enter
 KP_0
 KP_Period
+```
 
+```text
 Insert
 Home
 PageUp
@@ -185,7 +201,9 @@ Up
 Left
 Down
 Right
+```
 
+```text
 Extra1
 Extra2
 Extra3
@@ -202,3 +220,4 @@ Extra13
 Extra14
 Extra15
 Extra16
+```

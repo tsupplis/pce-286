@@ -1,5 +1,4 @@
-PCE/ibmpc - IBM PC Emulator
-==============================================================================
+# PCE/ibmpc - IBM PC Emulator
 
 PCE/ibmpc is an IBM PC emulator. It emulates most (but see below) of the
 hardware of an IBM PC 5150. The emulation is complete enough to boot DOS and
@@ -7,45 +6,77 @@ run most DOS applications.
 
 Emulated parts:
 
+```text
 Part		Status
+```
 
+```text
 CPU		An 8086/80186 emulator. The specific CPU model can be set
 		to 8088, 8086, 80188 or 80186 at run time.
+```
 
+```text
 BIOS		An unmodified BIOS from an IBM PC or PC/XT is needed.
+```
 
+```text
 8237 DMAC	Supported, but not particularily useful yet
+```
 
+```text
 8250 UART	Supported
+```
 
+```text
 8253 PIT	Only counting modes 0, 2 and 3 are supported at this time
+```
 
+```text
 8255 PPI	Supported
+```
 
+```text
 8259 PIC	Supported
+```
 
+```text
 Sound		Not yet supported
+```
 
+```text
 Video		Supported video cards are: MDA, CGA, Plantronics ColorPlus,
 		Wyse 700, HGC, EGA, VGA
+```
 
+```text
 EMS		Supported, with a custom DOS driver.
+```
 
+```text
 XMS		Supported, with a custom DOS driver.
+```
 
+```text
 Disks		Only supported through INT 13h at the moment.
+```
 
+```text
 Sound		Not yet supported.
+```
 
+```text
 Mouse		A Microsoft serial mouse is emulated.
+```
 
+```text
 Parallel Port	Partially supported. Output is written to a file.
+```
 
+```text
 Serial Port	Supported.
+```
 
-
-Configuration
-==============================================================================
+## Configuration
 
 PCE/ibmpc is configured by means of a config file. A documented example config
 file is installed in $(prefix)/etc/pce-ibmpc.cfg.
@@ -66,9 +97,7 @@ execution inherits many earlier-CPU timings; passing the IBM refresh-rate
 check at this setting does not establish cycle-accurate 6/8 MHz AT operation.
 Full native AT POST and DOS boot remain under development (see status.md).
 
-
-Running PCE/ibmpc
-==============================================================================
+## Running PCE/ibmpc
 
 After starting the emulator, pce is in command mode (unless the -r
 option was used). Type 'h' to get a short summary of the available

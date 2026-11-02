@@ -1,40 +1,49 @@
-PBI File Format
-===============
+# PBI File Format
 
 2018-02-18
 
 All integers are big-endian.
 
-Header
-------
+## Header
 
+```text
 offset	size	description
+```
 
+```text
 0	4	Magic ("PBI " or "PBIn")
 4	4	Version (0)
 8	4	Header size (48)
+```
 
+```text
 12	1	Level 1 bits
 13	1	Level 2 bits
 14	1	Block bits
 15	1	0
+```
 
+```text
 16	8	Image size in bytes
 24	8	Level 1 table offset
 32	8	File size
+```
 
+```text
 40	4	c
 44	2	h
 46	2	s
-
+```
 
 - The normal magic number is "PBI ". See below for uses of the "PBIn"
   magic.
 
+```text
 - The <block bits> field defines the basic block size as
   (1 << <block bits>). All blocks and level 2 tables must be aligned
   on a block   boundary. The level 1 table should be aligned on a block
   boundary.
+```
 
 - The <level 2 bits> field defines the size of level 2 tables as
   (1 << <level 2 bits>) entries.
@@ -51,17 +60,17 @@ offset	size	description
   doesn't have to be. Any data following <file size> will be
   overwritten when new blocks are allocated.
 
-- The <c>, <h> and <s> fields define the disk geometry. These are hints
+- The `<c>`, `<h>` and `<s>` fields define the disk geometry. These are hints
   only and some or all of these fields may be set to 0.
 
+## Alternate header
 
-Alternate header
-----------------
-
+```text
 If the magic is "PBIn" rather than "PBI " then all header fields except
 <block bits> are considered invalid and the real header (with "PBI "
 magic) is in the last block of the file, specifically at offset
 (EOF - (1 << <block bits>)).
+```
 
 Before such an image is modified in any way, the alternate header should
 be copied verbatim to the beginning of the image file. This is
@@ -71,31 +80,37 @@ header, causing it to be overwritten when new blocks are allocated.
 The purpose of this alternate header is to allow stream writing an
 image.
 
+## Level 1 table entries
 
-Level 1 table entries
----------------------
-
+```text
 Unallocated level 2 table
 0-63	0
+```
 
+```text
 Allocated level 2 table
 9-63	Level 2 table offset bits 9-63
 0-8	0
+```
 
+## Level 2 table entries
 
-Level 2 table entries
----------------------
-
+```text
 Unallocated block
 0-63	0
+```
 
+```text
 Allocated block
 9-63	Block offset bits 9-63
 0-8	0
+```
 
+```text
 Uniform block
 32-63	Fill data (4 bytes)
 		- These 4 bytes are repeated to fill the block.
 2-31	0
 1	1
 0	0
+```

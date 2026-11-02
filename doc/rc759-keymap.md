@@ -1,8 +1,10 @@
-RC759 Piccoline Keyboard Map
-----------------------------
+# RC759 Piccoline Keyboard Map
 
+```text
 Key		Make	Break	PCE key
+```
 
+```text
 Print		3A	BA	Backquote
 F1		3B	BB	F1
 F2		3C	BC	F2
@@ -17,7 +19,9 @@ F10		44	C4	F10
 F11		45	C5	F11
 F12		46	C6	F12
 Tegn/Ind	47	C7	Insert
+```
 
+```text
 Tab		01	81	Tab
 1		02	82	1
 2		03	83	2
@@ -32,7 +36,9 @@ Tab		01	81	Tab
 -		0C	8C	Minus
 `		0D	8D	Equal
 Backspace	0E	8E	Backspace
+```
 
+```text
 Esc		0F	8F	ESC
 Alt		37	B7	Alt
 Q		10	90	Q
@@ -48,7 +54,9 @@ P		19	99	P
 Ao		1B	9B	LeftBracket
 ;		27	A7	RightBracket
 Return		1C	9C	Return
+```
 
+```text
 Ctrl		1D	9D	Ctrl
 Caps Lock	28	A8	CapsLock
 A		1E	9E	A
@@ -63,7 +71,9 @@ L		26	A6	L
 AE		1A	9A	Semicolon
 O/		2B	AB	Apostrophe
 :		29	A9	Backslash
+```
 
+```text
 Left Shift	2A	AA	ShiftLeft
 Ue		38	B8	Less
 Z		2C	AC	Z
@@ -77,37 +87,52 @@ M		32	B2	M
 .		34	B4	Period
 /		35	B5	Slash
 Right Shift	36	B6	ShiftRight
+```
 
+```text
 Space		39	B9	Space
+```
 
+```text
 A1		48	C8	PageUp
 A2		49	C9	PageDown
 A3		4A	CA	End
 A4		4B	CB	NumLock
+```
 
+```text
 Left Arrow	4D	CD	Left
 Right Arrow	4E	CE	Right
 Up Arrow	4F	CF	Up
 Down Arrow	50	D0	Down
 Up-Left Arrow	51	D1	Home
+```
 
+```text
 Slet Tegn	52	D2	Delete
 KP 7		53	D3	KP_7
 KP 8		54	D4	KP_8
 KP 9		55	D5	KP_9
 KP -		56	D6	KP_Minus
+```
 
+```text
 KP +		57	D7	KP_Plus
 KP 4		58	D8	KP_4
 KP 5		59	D9	KP_5
 KP 6		5A	DA	KP_6
 KP ,		5B	5B	KP_Star
+```
 
+```text
 KP Tab		5C	DC	KP_Slash
 KP 1		5D	DD	KP_1
 KP 2		5E	DE	KP_2
 KP 3		5F	DF	KP_3
 KP Enter	60	E0	KP_Enter
+```
 
+```text
 KP 0		61	E1	KP_0
 KP .		62	E2	KP_Period
+```

@@ -1,82 +1,95 @@
-PTI File Format (2020-05-02)
-========================================================================
+# PTI File Format (2020-05-02)
 
-File structure
-------------------------------------------------------------------------
+## File structure
 
+```text
 <PTI Chunk>
 <Chunk 0>
 <Chunk 1>
 ...
 <Chunk n>
 <END Chunk>
+```
 
 All integers are in big-endian format.
 
 Unknown chunks should be skipped.
 
+## General Chunk format
 
-General Chunk format
-------------------------------------------------------------------------
-
+```text
 Offset	Size	Description
+```
 
+```text
 0	4	Chunk ID
 4	4	Chunk size (n)
 8	n	Chunk data
 8+n	4	Chunk CRC
+```
 
+```text
 	- The size does not include the chunk ID, chunk size or chunk
 	  CRC fields.
+```
 
+```text
 	- The chunk CRC covers the chunk ID, chunk size and chunk data.
+```
 
+## CHUNK "PTI ": File header chunk
 
-CHUNK "PTI ": File header chunk
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ('PTI ')
 4	4	Size (12)
 8	4	Version (0)
 12	4	Clock
 16	4	Flags
 20	4	CRC
+```
 
+```text
 	- No flags are defined yet.
+```
 
+## CHUNK "END ": End chunk
 
-CHUNK "END ": End chunk
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ('END ')
 4	4	Size (0)
 8	4	CRC (0x3d64af78)
+```
 
+```text
 	- This chunk marks the end of the file. Any data that follows
 	  should be ignored.
+```
 
+## CHUNK "TEXT": Comments
 
-CHUNK "TEXT": Comments
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ('TEXT')
 4	4	Size (n)
 8	n	Data
 8+n	4	CRC
+```
 
+```text
 	- Comments should be UTF-8, with lines separated by LF (0x0a).
 	- If there are multiple TEXT chunks, their contents should be
 	  concatenated.
+```
 
+## CHUNK "DATA": Data
 
-CHUNK "DATA": Data
-------------------------------------------------------------------------
-
+```text
 0	4	Magic ('DATA')
 4	4	Size (n)
 8	n	Data
 n+8	4	CRC
+```
 
+```text
 	- The data is organized in packets. Each packet represents either
 	  one or two phases of constant level.
 		one phase:
@@ -89,11 +102,17 @@ n+8	4	CRC
 	- The level can be on of [-1 0 1].
 	- There can be multiple data chunks. Their contents should be
 	  concatenated.
+```
 
+```text
 	Packet format:
+```
 
+```text
 	Byte	Bits	Description
+```
 
+```text
 	0	6-7	Signal level
 				00 = 1
 				01 = 0
@@ -108,24 +127,32 @@ n+8	4	CRC
 	1	0-7	duration
 	...
 	n-1	0-7	duration (lowest 8 bits)
+```
 
+## CRC
 
-CRC
-------------------------------------------------------------------------
-
+```text
 	- The algorithm used is big-endian CRC-32 with generator
 	  polynomial 0x1edc6f41. The CRC value is initialized to 0.
+```
 
+```text
 	unsigned long pti_crc (const unsigned char *buf, unsigned cnt)
 	{
 		unsigned      i, j;
 		unsigned long crc;
+```
 
+```text
 		crc = 0;
+```
 
+```text
 		for (i = 0; i < cnt; i++) {
 			crc ^= (unsigned long) (buf[i] & 0xff) << 24;
+```
 
+```text
 			for (j = 0; j < 8; j++) {
 				if (crc & 0x80000000) {
 					crc = (crc << 1) ^ 0x1edc6f41;
@@ -135,6 +162,9 @@ CRC
 				}
 			}
 		}
+```
 
+```text
 		return (crc & 0xffffffff);
 	}
+```
