@@ -1,7 +1,7 @@
 # PCE-286
 
 PCE-286 extends [PCE](http://www.hampa.ch/pce/), Hampa Hug’s excellent emulator environment.
-All credit for PCE goes to Hampa Hug.
+All credit for PCE goes to Hampa.
 
 ## Enhancements to Hampa's PCE
 
