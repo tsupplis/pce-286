@@ -47,6 +47,7 @@ src/arch/ibmpc/pceutils/pcem24.com
 src/arch/ibmpc/pceutils/pcemchk.com
 src/arch/ibmpc/pceutils/pcehimem.sys
 src/arch/ibmpc/pceutils/pceemm.sys
+src/arch/ibmpc/pceutils/pceeemm.sys
 src/arch/ibmpc/pceutils/pceclock.sys
 /src/utils/pfi/pfi
 /src/utils/psi/psi
