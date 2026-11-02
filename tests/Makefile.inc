@@ -393,7 +393,7 @@ tests/test_nec_native: tests/test_nec_native.o $(E8086_ARC)
 DIST += tests/test_nec_native.c
 
 # 8080 regression plus shared Z80 interrupt/flag checks.
-DIST += tests/test_8080_audit.c tests/8080-review.md
+DIST += tests/test_8080_audit.c
 .PHONY: check-8080-audit
 check-8080-audit: tests/test_8080_audit
 	./tests/test_8080_audit
@@ -408,7 +408,7 @@ tests/test_nec_8080: tests/test_nec_8080.o $(E8086_ARC)
 	$(CC) $(LDFLAGS_DEFAULT) -o $@ $^
 DIST += tests/test_nec_8080.c
 
-DIST += tests/nec-8080-mode.md
+DIST +=
 
 # Native AT tests use testroms/ and images/dos.img, never sample installations.
 AT_TEST_DIR ?= tests/memory-validation/make-at
@@ -603,7 +603,7 @@ npx-overflow-probe: tests/npxovf.com
 tests/npxovf.com: $(srcdir)/tests/asm/npxovf.asm
 	$(NASM) -f bin $< -o $@
 CLN += tests/npxovf.com
-DIST += tests/asm/npxovf.asm tests/decode_npx_overflow.py tests/npx-overflow-probe.md
+DIST += tests/asm/npxovf.asm tests/decode_npx_overflow.py
 
 .PHONY: check-npx-convert
 check-npx-unit: check-npx-convert

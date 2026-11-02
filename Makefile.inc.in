@@ -116,10 +116,7 @@ DIST += AUTHORS COPYING ChangeLog INSTALL \
 	README autogen.sh config.guess config.sub \
 	configure configure.ac gendep install-sh
 
-DIST += doc/char-drivers.txt doc/keys.txt doc/messages.txt \
-	doc/monitor.txt doc/pce-ibmpc.txt doc/pce-macplus.txt \
-	doc/pfi-format.txt doc/pri-format.txt doc/psi-format.txt \
-	doc/pti-format.txt doc/rc759-keymap.txt doc/sound-drivers.txt
+DIST += $(patsubst $(srcdir)/%,%,$(wildcard $(srcdir)/doc/*.md)) doc/ibmat.png doc/os2.png
 
 # ----------------------------------------------------------------------
 

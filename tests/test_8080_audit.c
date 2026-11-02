@@ -1,7 +1,7 @@
 /* 8080 regression, including focused shared Z80 checks.
  * Reference: Intel 8080/8085 Assembly Language Programming (1977),
  * auxiliary carry section, instruction descriptions and interrupt chapter.
- * Original failures and repair evidence: tests/8080-review.md. */
+ * Original failures and repair evidence: doc/8080-review.md. */
 #include <stdio.h>
 #include <string.h>
 #include <cpu/e8080/e8080.h>
