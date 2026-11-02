@@ -1,8 +1,7 @@
 # PCE-286
 
-**PCE was created by Hampa Hug.** This fork builds on his excellent PC emulator.
-Thank you, Hampa, for the original emulator that made this work possible.
-[Hampa Hug's original PCE project](http://www.hampa.ch/pce/)
+PCE-286 extends [PCE](http://www.hampa.ch/pce/), Hampa Hug’s excellent emulator environment.
+All credit for the original PCE goes to Hampa Hug.
 
 ## Enhancements to Hampa's PCE
 
@@ -24,10 +23,8 @@ Thank you, Hampa, for the original emulator that made this work possible.
 
 ### Intel 8087 and 80287
 
-- Added optional coprocessors: 8087 on PC/XT, 80287 on AT.
-- Added 80-bit arithmetic, comparisons, conversions, transcendental approximations and state save/restore.
-- Added board-level exception delivery (XT NMI, AT IRQ13) and partial instruction timing.
-- Verified CheckIt and MicroWay 87TEST on the emulated 80287. Exact original-chip results and timing remain open.
+- 8087 on PC/XT, 80287 on AT. Supports 80-bit arithmetic, conversions and numeric exceptions.
+- CheckIt and 87TEST pass on the emulated 80287. Timing and transcendental results remain approximate. [Configuration and limits](doc/numeric-coprocessors.md)
 
 ### EEMS banked memory on XT and AT
 
@@ -63,6 +60,3 @@ Build the X11 based terminal.
 --with-sdl
 Build the SDL based terminal.
 ```
-
-have fun
-Hampa Hug <hampa@hampa.ch>
