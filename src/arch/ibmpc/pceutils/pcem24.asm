@@ -141,7 +141,9 @@ msg	db	"Olivetti M24 BIOS extension version ", PCE_VERSION_STR
 ;-----------------------------------------------------------------------------
 ; Initialization
 ;-----------------------------------------------------------------------------
+%include "pceutils/dos-version.inc"
 start:
+	require_dos2
 	mov	ax, cs
 	mov	ds, ax
 

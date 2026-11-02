@@ -66,3 +66,6 @@ $(rel)/pcemsg.com:	$(rel)/pcemsg.asm $(PCEUTILS_SDP)
 $(rel)/pcestop.com:	$(rel)/pcestop.asm $(PCEUTILS_SDP)
 $(rel)/pcetime.com:	$(rel)/pcetime.asm $(PCEUTILS_SDP)
 $(rel)/pcever.com:	$(rel)/pcever.asm $(PCEUTILS_SDP)
+
+$(rel)/pceidle.com $(rel)/pcem24.com $(rel)/pcemchk.com: $(rel)/dos-version.inc
+DIST += $(rel)/dos-version.inc

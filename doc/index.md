@@ -43,3 +43,5 @@
 - [PRI Text](pri-text.md)
 - [PSI file format (2020-04-12)](psi-format.md)
 - [PTI File Format (2020-05-02)](pti-format.md)
+
+- [Hardware and programming bibliography](bibliography.md)

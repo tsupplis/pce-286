@@ -58,7 +58,9 @@ section .text
 ;-----------------------------------------------------------------------------
 ; Entry point
 ;-----------------------------------------------------------------------------
+%include "pceutils/dos-version.inc"
 start:
+	require_dos2
 	mov	ax, cs
 	mov	ds, ax
 	mov	es, ax
@@ -168,6 +170,11 @@ start:
 
 	; Get free XMS via INT 2Fh → XMS fn 08h
 	; First check XMS driver installed: INT 2Fh AX=4300h
+	mov	ax, 0x352f
+	int	0x21
+	mov	ax, es
+	or	ax, bx
+	jz	.xms_no_driver
 	mov	ax, 0x4300
 	int	0x2f
 	cmp	al, 0x80

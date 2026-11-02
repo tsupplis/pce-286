@@ -17,9 +17,14 @@ idle:
  pop bp
  iret
 resident_end:
+%include "pceutils/dos-version.inc"
 install:
+	require_dos2
  mov ax,3528h
  int 21h
+ mov ax,es
+ or ax,bx
+ jz .no_vector
  cmp bx,idle
  jne .new
  mov si,signature
@@ -43,4 +48,11 @@ install:
 .done:
  mov ax,4c00h
  int 21h
+.no_vector:
+ mov dx,no_idle
+ mov ah,9
+ int 21h
+ mov ax,4c01h
+ int 21h
+no_idle db 'PCEIDLE: no INT 28h handler',13,10,'$'
 msg db 'PCEIDLE installed',13,10,'$'
