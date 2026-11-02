@@ -195,6 +195,28 @@ load {
 #}
 
 
+# Optional ISA EEMS board for IBM 5160 (including 8088) and 5170.
+# Configure the existing RAM block at address 0 for size = 256K. The
+# board supplies the remaining 384K through 24 bankable 16K windows at
+# 40000h-9FFFFh. Keep this range free of other memory mappings.
+# The board has 2 MiB total and uses selector port 0219h and data port
+# 0218h. Choose one of the following configurations:
+#
+#   Concurrent DOS XM 6.21: eems {}
+#   Enable Internal EEMS in the guest SETUP and save. The built-in
+#   driver banks application memory across task switches. Omit the ems
+#   block below and any external EMM line in CCONFIG.SYS for this mode.
+#
+#   MS-DOS: eems { dos_frame = 1 }
+#   Load DEVICE=C:\PCE\PCEEEMM.SYS in CONFIG.SYS. Reserve E0000h-EFFFFh
+#   for four DOS page windows: omit the ems block below and exclude that
+#   range from UMBs and ROMs. Applications can allocate 104 pages
+#   (1664K) after the board supplies conventional RAM. Requires the
+#   rebuilt driver for an 8088/8086. Implements basic LIM services.
+#
+#   Ordinary software EMS (default below): keep the usual base RAM
+#   size, omit eems, and use PCEEMM.SYS with the ems block.
+
 ems {
 	# The EMS size in bytes
 	size = 8192K

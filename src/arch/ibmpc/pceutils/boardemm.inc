@@ -22,8 +22,11 @@ int_67:
  jb .unsupported
  cmp ah,4dh
  ja .unsupported
+ push ax
+ mov al,ah
+ xor ah,ah
  mov si,ax
- shr si,8
+ pop ax
  sub si,40h
  shl si,1
  jmp word [dispatch+si]
@@ -162,7 +165,8 @@ save_map:
  cmp byte [saved+si],0
  jne .already
  mov byte [saved+si],1
- shl si,2
+ shl si,1
+ shl si,1
  mov bp,[mapping]
  mov [contexts+si],bp
  mov bp,[mapping+2]
@@ -176,7 +180,8 @@ restore_map:
  cmp byte [saved+si],0
  je .none
  mov byte [saved+si],0
- shl si,2
+ shl si,1
+ shl si,1
  mov bp,si
  xor si,si
 .loop:

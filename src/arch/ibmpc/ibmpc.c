@@ -2678,10 +2678,11 @@ ibmpc_t *pc_new (ini_sct_t *ini)
 		mem_blk_t *base = mem_get_blk (pc->mem, 0);
 		int dos_frame;
 		ini_get_bool (ini_next_sct (ini, NULL, "eems"), "dos_frame", &dos_frame, 0);
-		if ((pc->model & PCE_IBMPC_5170) && base && base->size == 0x40000)
+		if ((pc->model & PCE_IBMPC_5160) && !(pc->model & PCE_IBMPC_M24) &&
+		    base && base->size == 0x40000)
 			pc->eems = eems_attach (pc->mem, dos_frame);
 		if (pc->eems == NULL)
-			pce_log (MSG_ERR, "*** EEMS requires AT, 256K base RAM and free 256-640K windows\n");
+			pce_log (MSG_ERR, "*** EEMS requires IBM XT/AT, 256K base RAM and free 256-640K windows\n");
 		else
 			pce_log (MSG_INF, "EEMS:     2048K at 0218h, conventional windows 4000h-9fffh\n");
 	}
