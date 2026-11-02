@@ -741,6 +741,16 @@ void e86_execute (e8086_t *c)
 
 void e86_clock (e8086_t *c, unsigned n)
 {
+	/* Device inputs are updated between calls. A halted native CPU with
+	 * no deliverable interrupt repeats the same two-clock wait. Preserve
+	 * its phase so the next IRQ is acknowledged at the same boundary. */
+	if (c->state == E86_STATE_HALT && n >= c->delay &&
+	    !c->nmi_pending && !c->nmi_shadow && !(c->irq && e86_get_if (c)) &&
+	    !((c->cpu & E86_CPU_NEC) && !(c->flg & 0x8000))) {
+		c->delay = 2 - ((n - c->delay) & 1);
+		c->clock += n;
+		return;
+	}
 	while (n >= c->delay) {
 		n -= c->delay;
 		c->clock += c->delay;

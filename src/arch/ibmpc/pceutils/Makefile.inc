@@ -19,6 +19,7 @@ $(rel)/%.sys: $(rel)/%.asm
 # ----------------------------------------------------------------------
 
 PCEUTILS_BAS_COM := \
+	pceidle \
 	pceexit \
 	pcem24 \
 	pcemchk \

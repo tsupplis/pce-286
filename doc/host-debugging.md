@@ -45,8 +45,17 @@ Send SIGINT to the emulator PID while it is running under the monitor. Issue com
 
 Verify the PID before sending `kill -INT PID`. For scripted sessions, retain the child PID, send SIGINT, wait for the monitor prompt, then issue commands. Finish with `q` and wait for the process to exit.
 
-## First idle measurement
+## DOS prompt idle CPU
 
-Compare the SDL DOS prompt, the same prompt with a null terminal, and the null terminal with CTTY on COM1. Keep the disk, CPU, speed, speaker and measurement interval identical. Confirm the prompt in each run. Measure host CPU seconds divided by elapsed seconds over 30 seconds. Separately collect several CS:IP snapshots to identify guest polling. Check keyboard latency and guest clock advancement before accepting an idle optimization.
+For single-task real-mode DOS, copy the built `src/arch/ibmpc/pceutils/pceidle.com` to the guest and run `PCEIDLE` once from AUTOEXEC.BAT. Reboot without that line to disable it. The TSR chains INT 28h and executes HLT when the caller allowed interrupts. Timer or keyboard interrupts wake the CPU. Programs that poll without calling the DOS idle hook receive no benefit from the TSR.
+
+MS-DOS 6.22, XT/8088, speed 24, null display/audio, 10-second samples (% of one host core):
+
+| Build | Plain DOS prompt | With PCEIDLE |
+|---|---:|---:|
+| Before halted-CPU optimization | 29.2% | 21.2% |
+| With halted-CPU optimization | 28.6% | 6.1% |
+
+BIOS ticks advanced and an injected VER command returned the DOS version in each run. A separate headless OS/2 1.3 run measured 31.4% over 15 seconds. SDL and serial-console measurements for this change remain open.
 
 [Monitor commands](monitor.md) · [Character drivers](char-drivers.md)
