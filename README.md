@@ -21,6 +21,12 @@ All credit for PCE goes to Hampa.
 - Reused the 8080 core for emulation-mode execution.
 - Verified a CP/M-80 assembler and its generated program under VCPM on CP/M-86 (V20).
 
+### NEC μPD9002 (experimental)
+
+- Select `cpu { model = "upd9002" }` on an IBM XT for V30-compatible native code and Z80-mode programs.
+- Enter Z80 mode with `BRKEM`, call native handlers with `CALLN`, and return with `RETEM`.
+- ZEXDOC and ZEXALL each pass 67/67 groups under DOS on the emulated XT. Original-chip timing remains unverified. [XT configuration and test commands](doc/ibmxt-config.md#experimental-µpd9002-cpu)
+
 ### Intel 8087 and 80287
 
 - 8087 on PC/XT, 80287 on AT. Supports 80-bit arithmetic, conversions and numeric exceptions.
