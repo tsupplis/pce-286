@@ -2408,7 +2408,10 @@ void e86_disasm_mem (e8086_t *c, e86_disasm_t *op, unsigned short cs, unsigned s
 			op->dat_n=src[1]==0xed?3:2;
 			if(src[1]==0xed) {op->arg_n=1;disasm_imm8(op->arg1,src+2);op->flags|=E86_DFLAGS_CALL;}
 		} else {
-			memset(&d,0,sizeof d);e8080_disasm(&d,src,ip);strcpy(op->op,d.op);op->dat_n=d.data_cnt;
+			memset(&d,0,sizeof d);
+			if (c->cpu & E86_CPU_UPD9002) z80_disasm(&d,src,ip);
+			else e8080_disasm(&d,src,ip);
+			strcpy(op->op,d.op);op->dat_n=d.data_cnt;
 			op->arg_n=d.arg_cnt;strcpy(op->arg1,d.arg[0]);strcpy(op->arg2,d.arg[1]);
 			if(d.flags&E8080_OPF_CALL)op->flags|=E86_DFLAGS_CALL;
 		}

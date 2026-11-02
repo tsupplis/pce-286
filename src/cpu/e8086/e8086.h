@@ -35,6 +35,7 @@
 #define E86_CPU_INT6       0x08         /* throw illegal opcode exception */
 #define E86_CPU_INT7       0x10		/* throw escape opcode exception */
 #define E86_CPU_FLAGS286   0x20         /* Allow clearing flags 12-15 */
+#define E86_CPU_UPD9002    0x100        /* Z80-compatible emulation mode */
 #define E86_CPU_NEC        0x80         /* NEC native ISA/model policy */
 #define E86_CPU_8BIT       0x40		/* 16 bit accesses take more time */
 
@@ -573,6 +574,7 @@ void e86_set_80286 (e8086_t *c);
  * No-op in real mode. A null selector clears the cache. CS loads update CPL.
  */
 void e86_load_seg_pm (e8086_t *c, unsigned reg, unsigned short sel);
+void e86_set_upd9002 (e8086_t *c);
 void e86_set_v30 (e8086_t *c);
 void e86_set_v20 (e8086_t *c);
 

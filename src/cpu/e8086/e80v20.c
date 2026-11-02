@@ -154,11 +154,19 @@ void e86_set_v30(e8086_t *c)
  e86_set_80186(c);
  c->cpu &= ~(E86_CPU_REP_BUG|E86_CPU_MASK_SHIFT);
  c->cpu |= E86_CPU_NEC;
+ e8080_set_8080(&c->nec8080);
  c->op[0x0f]=op_0f_v20;
  c->op[0xd4]=op_nec_aam;c->op[0xd5]=op_nec_aad;
  c->op[0x64]=op_nec_repeat;c->op[0x65]=op_nec_repeat;
  /* Keep native CHKIND (62h), inherited as BOUND from the 80186.
   * The remaining NEC families are separate follow-ups. */
+}
+
+void e86_set_upd9002(e8086_t *c)
+{
+ e86_set_v30(c);
+ c->cpu |= E86_CPU_UPD9002;
+ e8080_set_z80(&c->nec8080);
 }
 
 void e86_set_v20(e8086_t *c)

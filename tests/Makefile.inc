@@ -663,3 +663,14 @@ DIST += tests/test_npx_board.c
 check-npx-guest: $(PCE_IBMPC_BIN)
 	python3 tests/test_npx_guest.py --emulator $(PCE_IBMPC_BIN)
 DIST += tests/test_npx_guest.py tests/asm/tnpxboard.asm
+
+ifeq "$(PCE_HAVE_NASM)" "1"
+.PHONY: check-upd9002
+check-unit: check-upd9002
+check-upd9002: tests/test_nec_8080 tests/upd9002-transition.img
+	./tests/test_nec_8080 tests/upd9002-transition.img
+tests/upd9002-transition.img: tests/asm/upd9002-transition.asm
+	$(NASM) -f bin $< -o $@
+endif
+CLN += tests/upd9002-transition.img
+DIST += tests/asm/upd9002-transition.asm

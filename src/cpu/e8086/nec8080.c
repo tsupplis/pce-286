@@ -59,11 +59,21 @@ void e86_nec_step(e8086_t*c) {
  e8080_set_a(x,e86_get_al(c));e8080_set_bc(x,e86_get_cx(c));
  e8080_set_de(x,e86_get_dx(c));e8080_set_hl(x,e86_get_bx(c));
  x->sp=e86_get_bp(c);x->pc=c->ip;x->psw=(c->flg&0xd5)|2;
+ if (c->cpu & E86_CPU_UPD9002) {
+  x->ix=e86_get_si(c);
+  x->iy=e86_get_di(c);
+  x->psw=c->flg & 0xff;
+ }
  x->iff=e86_get_if(c);x->int_val=x->int_req=0;x->halt=0;x->delay=0;
  e8080_execute(x);
  e86_set_al(c,e8080_get_a(x));e86_set_cx(c,e8080_get_bc(x));
  e86_set_dx(c,e8080_get_de(x));e86_set_bx(c,e8080_get_hl(x));e86_set_bp(c,x->sp);
  c->ip=x->pc;c->flg=(c->flg&~0x2d5U)|(x->psw&0xd5)|2|(x->iff?E86_FLG_I:0);
+ if (c->cpu & E86_CPU_UPD9002) {
+  e86_set_si(c,x->ix);
+  e86_set_di(c,x->iy);
+  c->flg=(c->flg & ~0xffU) | x->psw;
+ }
  if(x->halt) {c->ip=(c->ip+1)&65535;c->state|=E86_STATE_HALT;}
  e86_set_clk(c,x->delay);c->opcnt++;e86_pq_init(c);
  if(c->save_flags & E86_FLG_T) {

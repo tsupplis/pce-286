@@ -3917,7 +3917,10 @@ unsigned op_cf (e8086_t *c)
 		c->flg = (flg & 0x0fd5) | 0x0002;
 	}
 	else if (c->cpu & E86_CPU_NEC) {
-		c->flg = (flg & 0x8fd5) | 2 | (c->nec_md_write ? 0 : 0x8000);
+		if ((c->cpu & E86_CPU_UPD9002) && c->nec_md_write && !(flg & 0x8000))
+			c->flg = flg & 0x0fff; /* Restore Z80 F from the interrupt frame. */
+		else
+			c->flg = (flg & 0x8fd5) | 2 | (c->nec_md_write ? 0 : 0x8000);
 	}
 
 	else {

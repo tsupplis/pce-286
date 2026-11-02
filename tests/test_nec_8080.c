@@ -77,4 +77,28 @@ static void workload(unsigned m){
  c=setup(m);step(c,1);c->ip=0xffff;ram[0x1ffff]=0x3e;ram[0x10000]=0x67;
  step(c,1);check("code immediate wraps within CS",c->ip==1&&e86_get_al(c)==0x67);e86_del(c);
 }
-int main(void){unsigned m;for(m=0;m<2;m++){roundtrip(m);events(m);workload(m);}printf("NEC 8080: %u checks, %u failures\n",checks,failures);return failures?1:0;}
+static int hybrid_probe(const char *path)
+{
+ unsigned steps;
+ e8086_t *c = setup(1);
+ FILE *f = fopen(path, "rb");
+ if (!f || fread(ram + 0x7c00, 1, 512, f) != 512) {
+  fprintf(stderr, "Cannot read probe %s\n", path);
+  if (f) fclose(f);
+  e86_del(c);
+  return 1;
+ }
+ fclose(f);
+ e86_set_upd9002(c);
+ e86_reset(c);
+ e86_set_cs(c, 0);
+ c->ip = 0x7c00;
+ for (steps = 0; steps < 128 && !(c->state & E86_STATE_HALT); steps++)
+  e86_execute(c);
+ check("upd9002 transition probe", (c->state & E86_STATE_HALT) &&
+       e86_get_ax(c) == 0x9002 && e86_get_sp(c) == 0x7000);
+ printf("upd9002 probe: %u steps, AX=%04x, SP=%04x\n", steps, e86_get_ax(c), e86_get_sp(c));
+ e86_del(c);
+ return failures != 0;
+}
+int main(int argc,char **argv){if(argc==2)return hybrid_probe(argv[1]);unsigned m;for(m=0;m<2;m++){roundtrip(m);events(m);workload(m);}printf("NEC 8080: %u checks, %u failures\n",checks,failures);return failures?1:0;}

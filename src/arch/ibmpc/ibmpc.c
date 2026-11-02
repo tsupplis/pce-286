@@ -3267,6 +3267,9 @@ int pc_set_cpu_model (ibmpc_t *pc, const char *str)
 	else if (strcmp (str, "80188") == 0) {
 		e86_set_80188 (pc->cpu);
 	}
+	else if (strcmp (str, "upd9002") == 0) {
+		e86_set_upd9002 (pc->cpu);
+	}
 	else if (strcmp (str, "v30") == 0) {
 		e86_set_v30 (pc->cpu);
 	}
