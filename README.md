@@ -9,6 +9,7 @@ The original repository is at http://www.hampa.ch/pce/
 - Full 286 support including protected mode
 - Support for NEC V20 8080 instruction set
 - 8087/80287 support (Early days, timing accuracy will come progressively)
+- AST EEMS RAM Emulation (for 287)
 
 ## PCE - PC Emulator
 
