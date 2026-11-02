@@ -46,6 +46,10 @@ For further information check out these files:
 
 - doc/messages.txt Messages to control the emulator
 
+## Quick guides
+
+[IBM XT configuration](ibmxt-config.md) · [IBM AT configuration](ibmat-config.md) · [Host debugging](host-debugging.md)
+
 ## Install
 
 To install do:
