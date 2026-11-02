@@ -400,8 +400,8 @@ DIST += tests/test_8080_audit.c
 check-8080-audit: tests/test_8080_audit
 	./tests/test_8080_audit
 
-tests/test_8080_audit: tests/test_8080_audit.c $(CPU_8080_SRC) $(CPU_8080_HDR)
-	$(CC) $(CFLAGS_DEFAULT) -Isrc -o $@ tests/test_8080_audit.c $(CPU_8080_SRC)
+tests/test_8080_audit: tests/test_8080_audit.c src/cpu/e8080/e8080.a src/cpu/e8080/e8080.h
+	$(CC) $(CFLAGS_DEFAULT) -Isrc -o $@ $< src/cpu/e8080/e8080.a
 CLN += tests/test_8080_audit
 
 tests/test_nec_8080.o: tests/test_nec_8080.c $(E8086_HDR) $(CPU_8080_HDR)

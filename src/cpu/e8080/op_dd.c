@@ -85,6 +85,7 @@ static void op_dd_22 (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_mem16 (c, adr, e8080_get_ix (c));
 	e8080_set_clk (c, 4, 20);
 }
@@ -145,6 +146,7 @@ static void op_dd_2a (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_ix (c, e8080_get_mem16 (c, adr));
 	e8080_set_clk (c, 4, 20);
 }

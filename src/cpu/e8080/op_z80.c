@@ -447,6 +447,7 @@ static void op_37 (e8080_t *c)
 	e8080_set_cf (c, 1);
 	e8080_set_af (c, 0);
 	e8080_set_nf (c, 0);
+	z80_set_xy (c, e8080_get_a (c) | (c->previous_q ? 0 : c->psw));
 	e8080_set_clk (c, 1, 4);
 }
 
@@ -508,6 +509,7 @@ static void op_3f (e8080_t *c)
 	e8080_set_af (c, e8080_get_cf (c));
 	e8080_set_nf (c, 0);
 	e8080_set_cf (c, e8080_get_cf (c) == 0);
+	z80_set_xy (c, e8080_get_a (c) | (c->previous_q ? 0 : c->psw));
 	e8080_set_clk (c, 1, 4);
 }
 

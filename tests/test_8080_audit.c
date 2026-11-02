@@ -97,7 +97,28 @@ static void interrupt_tests(void) {
  c.pc=0;mem[0]=0x05;e8080_execute(&c);
  check("Z80 DEC zero still sets H",e8080_get_af(&c));
 }
+static void z80_flag_history(void)
+{
+ /* LD SP,(07FFh) leaves WZ=0800h. BIT uses its high byte even
+  * though HL points elsewhere and the operand has neither flag bit. */
+ static const unsigned char bit[] = {0xed,0x7b,0xff,0x07,0xcb,0x46};
+ static const unsigned char carry[] = {0xb8,0x37,0xb8,0x00,0x3f};
+ setup(); e8080_set_z80(&c);
+ memcpy(mem,bit,sizeof bit);
+ e8080_set_hl(&c,0x1000);
+ e8080_execute(&c); e8080_execute(&c);
+ check("BIT (HL) copies WZ high byte on address carry", (c.psw & 0x28)==0x08);
+ setup(); e8080_set_z80(&c);
+ memcpy(mem,carry,sizeof carry);
+ e8080_set_a(&c,0x08); e8080_set_b(&c,0x20);
+ e8080_execute(&c); e8080_execute(&c);
+ check("SCF after CP takes XY from A", (c.psw & 0x28)==0x08);
+ e8080_execute(&c); e8080_execute(&c); e8080_execute(&c);
+ check("CCF after NOP merges old XY with A", (c.psw & 0x28)==0x28);
+}
+
 int main(void) {
+ z80_flag_history();
  unsigned a,b,bad=0;
  arithmetic();
  interrupt_tests();

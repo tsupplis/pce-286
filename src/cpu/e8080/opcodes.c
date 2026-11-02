@@ -298,6 +298,7 @@ static void op_22 (e8080_t *c)
 
 	e8080_get_inst12 (c);
 	adr = e8080_uint16 (c->inst[1], c->inst[2]);
+	if (c->flags & E8080_FLAG_Z80) c->wz = adr + 1;
 	e8080_set_mem8 (c, adr + 0, e8080_get_l (c));
 	e8080_set_mem8 (c, adr + 1, e8080_get_h (c));
 	e8080_set_clk (c, 3, 16);
@@ -380,6 +381,7 @@ static void op_2a (e8080_t *c)
 
 	e8080_get_inst12 (c);
 	adr = e8080_uint16 (c->inst[1], c->inst[2]);
+	if (c->flags & E8080_FLAG_Z80) c->wz = adr + 1;
 	e8080_set_l (c, e8080_get_mem8 (c, adr + 0));
 	e8080_set_h (c, e8080_get_mem8 (c, adr + 1));
 	e8080_set_clk (c, 3, 16);

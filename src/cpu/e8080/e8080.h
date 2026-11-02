@@ -56,6 +56,8 @@ typedef struct e8080_t {
 	unsigned short iy;
 	unsigned char  psw;
 	unsigned char  psw2;
+	unsigned short wz;            /* Z80 internal memory pointer */
+	unsigned char  q, previous_q; /* flag computation in consecutive instructions */
 	unsigned char  reg[8];
 	unsigned char  reg2[8];
 	unsigned char  i;

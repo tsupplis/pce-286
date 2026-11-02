@@ -47,6 +47,7 @@ static void op_ed_40 (e8080_t *c)
 	d = e8080_get_port8 (c, e8080_get_bc (c));
 	e8080_set_reg8 (c, r, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 2, 12);
 }
 
@@ -80,6 +81,7 @@ static void op_ed_43 (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_mem16 (c, adr, e8080_get_bc (c));
 	e8080_set_clk (c, 4, 20);
 }
@@ -140,6 +142,7 @@ static void op_ed_4b (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_bc (c, e8080_get_mem16 (c, adr));
 	e8080_set_clk (c, 4, 20);
 }
@@ -179,6 +182,7 @@ static void op_ed_53 (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_mem16 (c, adr, e8080_get_de (c));
 	e8080_set_clk (c, 4, 20);
 }
@@ -199,6 +203,7 @@ static void op_ed_57 (e8080_t *c)
 	d = e8080_get_i (c);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N);
+	z80_set_xy (c, d);
 	e8080_set_pf (c, c->iff2);
 	e8080_set_clk (c, 2, 9);
 }
@@ -223,6 +228,7 @@ static void op_ed_5b (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_de (c, e8080_get_mem16 (c, adr));
 	e8080_set_clk (c, 4, 20);
 }
@@ -243,6 +249,7 @@ static void op_ed_5f (e8080_t *c)
 	d = e8080_get_r (c);
 	e8080_set_a (c, d);
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N);
+	z80_set_xy (c, d);
 	e8080_set_pf (c, c->iff2);
 	e8080_set_clk (c, 2, 9);
 }
@@ -266,6 +273,7 @@ static void op_ed_63 (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_mem16 (c, adr, e8080_get_hl (c));
 	e8080_set_clk (c, 4, 20);
 }
@@ -307,6 +315,7 @@ static void op_ed_6b (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_hl (c, e8080_get_mem16 (c, adr));
 	e8080_set_clk (c, 4, 20);
 }
@@ -336,6 +345,7 @@ static void op_ed_70 (e8080_t *c)
 
 	d = e8080_get_port8 (c, e8080_get_bc (c));
 	e8080_set_psw_szp (c, d, 0, E8080_FLG_A | E8080_FLG_N);
+	z80_set_xy (c, d);
 	e8080_set_clk (c, 2, 12);
 }
 
@@ -366,6 +376,7 @@ static void op_ed_73 (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_mem16 (c, adr, e8080_get_sp (c));
 	e8080_set_clk (c, 4, 20);
 }
@@ -390,6 +401,7 @@ static void op_ed_7b (e8080_t *c)
 
 	e8080_get_inst23 (c);
 	adr = e8080_uint16 (c->inst[2], c->inst[3]);
+	c->wz = adr + 1;
 	e8080_set_sp (c, e8080_get_mem16 (c, adr));
 	e8080_set_clk (c, 4, 20);
 }
@@ -449,6 +461,7 @@ static void op_ed_a2 (e8080_t *c)
 	e8080_set_b (c, n);
 	e8080_set_zf (c, n == 0);
 	e8080_set_nf (c, 1);
+	c->q = 1;
 	e8080_set_clk (c, 2, 16);
 }
 
@@ -464,6 +477,7 @@ static void op_ed_a3 (e8080_t *c)
 	e8080_set_b (c, n);
 	e8080_set_zf (c, n == 0);
 	e8080_set_nf (c, 1);
+	c->q = 1;
 	e8080_set_clk (c, 2, 16);
 }
 
@@ -516,6 +530,7 @@ static void op_ed_aa (e8080_t *c)
 	e8080_set_b (c, n);
 	e8080_set_zf (c, n == 0);
 	e8080_set_nf (c, 1);
+	c->q = 1;
 	e8080_set_clk (c, 2, 16);
 }
 
@@ -531,6 +546,7 @@ static void op_ed_ab (e8080_t *c)
 	e8080_set_b (c, n);
 	e8080_set_zf (c, n == 0);
 	e8080_set_nf (c, 1);
+	c->q = 1;
 	e8080_set_clk (c, 2, 16);
 }
 
@@ -594,6 +610,7 @@ static void op_ed_b2 (e8080_t *c)
 	e8080_set_b (c, n);
 	e8080_set_zf (c, 1);
 	e8080_set_nf (c, 1);
+	c->q = 1;
 
 	if (n == 0) {
 		e8080_set_clk (c, 2, 16);
@@ -615,6 +632,7 @@ static void op_ed_b3 (e8080_t *c)
 	e8080_set_b (c, n);
 	e8080_set_zf (c, 1);
 	e8080_set_nf (c, 1);
+	c->q = 1;
 
 	if (n == 0) {
 		e8080_set_clk (c, 2, 16);
@@ -684,6 +702,7 @@ static void op_ed_ba (e8080_t *c)
 	e8080_set_b (c, n);
 	e8080_set_zf (c, 1);
 	e8080_set_nf (c, 1);
+	c->q = 1;
 
 	if (n == 0) {
 		e8080_set_clk (c, 2, 16);
@@ -705,6 +724,7 @@ static void op_ed_bb (e8080_t *c)
 	e8080_set_b (c, n);
 	e8080_set_zf (c, 1);
 	e8080_set_nf (c, 1);
+	c->q = 1;
 
 	if (n == 0) {
 		e8080_set_clk (c, 2, 16);

@@ -34,6 +34,8 @@ void e8080_init (e8080_t *c)
 
 	c->flags = 0;
 	c->ei_delay = 0;
+	c->wz = 0;
+	c->q = c->previous_q = 0;
 	c->inta_active = 0;
 	c->inta_ext = NULL;
 	c->get_inta = NULL;
@@ -540,6 +542,8 @@ void e8080_reset (e8080_t *c)
 
 	c->halt = 0;
 	c->ei_delay = 0;
+	c->wz = 0;
+	c->q = c->previous_q = 0;
 	c->inta_active = 0;
 }
 
@@ -615,6 +619,10 @@ void e8080_execute (e8080_t *c)
 
 	e8080_inc_r (c);
 
+	if (c->flags & E8080_FLAG_Z80) {
+		c->previous_q = c->q;
+		c->q = 0;
+	}
 	c->op[c->inst[0]] (c);
 
 	c->inscnt += 1;

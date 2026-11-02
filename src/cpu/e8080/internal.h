@@ -32,6 +32,7 @@ static inline void z80_set_xy (e8080_t *c, unsigned value)
 {
 	const unsigned mask = E8080_FLG_3 | E8080_FLG_5;
 	c->psw = (c->psw & ~mask) | (value & mask);
+	c->q = 1;
 }
 
 /* An INTA instruction consumes bus bytes, not bytes at PC. */
@@ -73,8 +74,8 @@ static inline unsigned char e8080_inst_byte (e8080_t *c, unsigned n)
 
 #define e8080_sext8(v) (((v) & 0x80) ? ((v) | 0xff00) : ((v) & 0x007f))
 
-#define e8080_get_ixd(c, i) (((c)->ix + e8080_sext8 ((c)->inst[(i)])) & 0xffff)
-#define e8080_get_iyd(c, i) (((c)->iy + e8080_sext8 ((c)->inst[(i)])) & 0xffff)
+#define e8080_get_ixd(c, i) ((c)->wz = (((c)->ix + e8080_sext8 ((c)->inst[(i)])) & 0xffff))
+#define e8080_get_iyd(c, i) ((c)->wz = (((c)->iy + e8080_sext8 ((c)->inst[(i)])) & 0xffff))
 
 #define e8080_inc_r(c) do { \
 	(c)->r = ((c)->r & 0x80) | (((c)->r + 1) & 0x7f); \

@@ -54,3 +54,5 @@ Requires the usual XT test ROMs, `images/dos.img`, NASM and mtools. Each
 suite boots from a disposable floppy. Reports go in
 `tests/memory-validation/zex/`. Diagnostic binaries and source:
 [Frank Cringle’s Z80 instruction exercisers](https://github.com/agn453/ZEXALL/tree/8f71d418bae69a476a5a0e5c6e122c8801b8d9f4).
+
+Verified on the emulated 5160 with DOS and `upd9002`: ZEXDOC 67/67 and ZEXALL 67/67. These checks cover the exercised Z80 instruction results and flags. Chip timing and full µPD9002 hardware equivalence remain unverified.
