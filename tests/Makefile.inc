@@ -253,6 +253,7 @@ ASM_NASM_FLAGS := -O6 -I$(srcdir)/src/ -I$(srcdir)/src/arch/ibmpc/
 ASM_TEST_COMS := \
 	$(ASM_DIR)/t186.com     \
 	$(ASM_DIR)/t286.com     \
+	$(ASM_DIR)/tupd9002.com \
 	$(ASM_DIR)/tv20.com     \
 	$(ASM_DIR)/ta20.com     \
 	$(ASM_DIR)/tprot.com    \
@@ -266,6 +267,7 @@ CLN += $(ASM_TEST_COMS)
 DIST += \
 	$(ASM_DIR)/t186.asm     \
 	$(ASM_DIR)/t286.asm     \
+	$(ASM_DIR)/tupd9002.asm \
 	$(ASM_DIR)/tv20.asm     \
 	$(ASM_DIR)/ta20.asm     \
 	$(ASM_DIR)/tprot.asm    \
@@ -674,3 +676,11 @@ tests/upd9002-transition.img: tests/asm/upd9002-transition.asm
 endif
 CLN += tests/upd9002-transition.img
 DIST += tests/asm/upd9002-transition.asm
+
+.PHONY: check-upd9002-zex
+check-upd9002-zex: tests/asm/zexrun.com src/arch/ibmpc/pceutils/pceexit.com $(TEST_EMULATOR)
+	@test -n "$(ZEX_DIR)" || { echo "Set ZEX_DIR to the directory containing zexdoc.com and zexall.com"; exit 1; }
+	python3 tests/run_upd9002_zex.py "$(ZEX_DIR)"
+
+CLN += tests/asm/zexrun.com
+DIST += tests/asm/zexrun.asm tests/run_upd9002_zex.py

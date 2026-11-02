@@ -38,3 +38,19 @@ disk { drive = 128 type = "auto" file = "hd0-ibmxt.img" }
 Choose one EMS row. The EEMS board supplies 384 KiB of conventional RAM above the motherboard’s 256 KiB. PCEX in this profile supplies assisted boot and disk access. The speed setting is a multiplier.
 
 [Full template](../src/arch/ibmpc/pce-ibmpc.cfg.in) · [Headless operation](host-debugging.md) · [Disk creation](disk-creation.md) · [Memory](ibmpc-memory.md)
+
+### Experimental µPD9002 CPU
+
+Set `model = "upd9002"` in the XT configuration’s `cpu` block to run native NEC code and Z80-mode programs on the PC platform. To check a DOS 2+ guest, build `make tests/asm/tupd9002.com`, copy the resulting file to the guest, and run `TUPD9002`. It prints `UPD9002 PASS` and returns exit code 0 after testing separate code and data segments, indexed Z80 memory access and a native interrupt callback.
+
+For longer Z80 regressions, build `make tests/asm/zexrun.com` and copy
+`ZEXRUN.COM` and the two CP/M exercisers to DOS. Run `ZEXRUN ZEXDOC.COM`
+(documented flags) and `ZEXRUN ZEXALL.COM` (includes undocumented flags).
+The launcher implements the console calls used by these diagnostics. Inspect
+their CRC reports for failures. A normal return to DOS means the guest finished.
+
+For a headless run, use `make check-upd9002-zex ZEX_DIR=/path/to/ZEXALL`.
+Requires the usual XT test ROMs, `images/dos.img`, NASM and mtools. Each
+suite boots from a disposable floppy. Reports go in
+`tests/memory-validation/zex/`. Diagnostic binaries and source:
+[Frank Cringle’s Z80 instruction exercisers](https://github.com/agn453/ZEXALL/tree/8f71d418bae69a476a5a0e5c6e122c8801b8d9f4).
