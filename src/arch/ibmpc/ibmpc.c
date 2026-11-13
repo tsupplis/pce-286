@@ -2686,10 +2686,16 @@ ibmpc_t *pc_new (ini_sct_t *ini)
 		else
 			pce_log (MSG_INF, "EEMS:     2048K at 0218h, conventional windows 4000h-9fffh\n");
 	}
-	pc_setup_at_rtc (pc, ini);   /* AT: CMOS/RTC — no-op for 5150/5160 */
 	pc_setup_covox (pc, ini);
 
-	pce_load_mem_ini (pc->mem, ini);
+	if (pce_load_mem_ini (pc->mem, ini)) {
+		/* On constructor failure the configuration belongs to the caller. */
+		pc->cfg = NULL;
+		pc_del (pc);
+		return (NULL);
+	}
+
+	pc_setup_at_rtc (pc, ini);
 
 	mem_move_to_front (pc->mem, 0xfe000);
 
@@ -2761,7 +2767,9 @@ void pc_del (ibmpc_t *pc)
 	cas_del (pc->cas);
 	/* AT: save CMOS and free RTC */
 	if (pc->at_rtc != NULL) {
-		mc146818a_save (pc->at_rtc);
+		if ((pc->at_rtc->fname != NULL) && mc146818a_save (pc->at_rtc)) {
+			pce_log (MSG_ERR, "*** failed to save CMOS (%s)\n", pc->at_rtc->fname);
+		}
 		mc146818a_del (pc->at_rtc);
 		pc->at_rtc = NULL;
 	}
@@ -3250,7 +3258,7 @@ int pc_set_cpu_model (ibmpc_t *pc, const char *str)
 {
     if (pc->npx.enabled &&
         (pc->npx.core.model == E87_80287 ? strcmp(str, "80286") != 0 :
-         (strcmp(str, "8086") != 0 && strcmp(str, "8088") != 0))) {
+         !pc_npx_8087_cpu(str))) {
         pce_log(MSG_ERR, "*** CPU model %s is incompatible with attached NPX\n", str);
         return 1;
     }

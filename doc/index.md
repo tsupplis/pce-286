@@ -4,6 +4,7 @@
 
 - [IBM XT quick configuration](ibmxt-config.md)
 - [IBM AT quick configuration](ibmat-config.md)
+- [IBM PC display configurations](display.md)
 - [Disk images for IBM XT and AT](disk-creation.md)
 - [IBM PC memory quick reference](ibmpc-memory.md)
 - [Optional 8087 / 80287 coprocessor](numeric-coprocessors.md)

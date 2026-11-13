@@ -46,11 +46,10 @@ int dsk_qed_read_header (disk_qed_t *qed)
 static
 int dsk_qed_write_header (disk_qed_t *qed)
 {
-	if (dsk_write (qed->fp, qed->header, 0, sizeof (qed->header))) {
+	if (dsk_write (qed->fp, qed->header, 0, sizeof (qed->header)) || fflush (qed->fp)) {
+		qed->metadata_error = 1;
 		return (1);
 	}
-
-	fflush (qed->fp);
 
 	return (0);
 }
@@ -68,11 +67,10 @@ int dsk_qed_read_l1 (disk_qed_t *qed)
 static
 int dsk_qed_write_l1 (disk_qed_t *qed)
 {
-	if (dsk_write (qed->fp, qed->t1, qed->l1_table_offset, qed->table_bytes)) {
+	if (dsk_write (qed->fp, qed->t1, qed->l1_table_offset, qed->table_bytes) || fflush (qed->fp)) {
+		qed->metadata_error = 1;
 		return (1);
 	}
-
-	fflush (qed->fp);
 
 	return (0);
 }
@@ -96,11 +94,10 @@ int dsk_qed_read_l2 (disk_qed_t *qed, uint64_t ofs)
 static
 int dsk_qed_write_l2 (disk_qed_t *qed, uint64_t ofs)
 {
-	if (dsk_write (qed->fp, qed->t2, ofs, qed->table_bytes)) {
+	if (dsk_write (qed->fp, qed->t2, ofs, qed->table_bytes) || fflush (qed->fp)) {
+		qed->metadata_error = 1;
 		return (1);
 	}
-
-	fflush (qed->fp);
 
 	qed->l2_table_offset = ofs;
 
@@ -270,6 +267,7 @@ int dsk_qed_read (disk_t *dsk, void *buf, uint32_t i, uint32_t n)
 	}
 
 	qed = dsk->ext;
+	if (qed->metadata_error) return (1);
 
 	while (n > 0) {
 		k = i % (qed->cluster_size / 512);
@@ -322,6 +320,7 @@ int dsk_qed_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 	}
 
 	qed = dsk->ext;
+	if (qed->metadata_error) return (1);
 
 	while (n > 0) {
 		k = i % (qed->cluster_size / 512);
@@ -352,7 +351,7 @@ int dsk_qed_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 		n -= m;
 	}
 
-	return (0);
+	return (fflush (qed->fp) != 0);
 }
 
 static
@@ -363,7 +362,7 @@ int dsk_qed_commit (disk_qed_t *qed)
 	unsigned long table_entries;
 	uint64_t      ofs;
 
-	if (qed->next == NULL) {
+	if (qed->metadata_error || qed->next == NULL) {
 		return (1);
 	}
 
@@ -591,6 +590,7 @@ disk_t *dsk_qed_open_fp (FILE *fp, int ro)
 
 	qed->fp = fp;
 
+	qed->metadata_error = 0;
 	qed->next = NULL;
 
 	qed->t1 = NULL;
@@ -706,7 +706,11 @@ disk_t *dsk_qed_cow_open (disk_t *dsk, const char *fname)
 		memcpy (qed->header + 64, dsk->fname, n);
 	}
 
-	dsk_qed_write_header (qed);
+	if (dsk_qed_write_header (qed)) {
+		qed->next = NULL; /* Caller retains the base on open failure. */
+		dsk_del (cow);
+		return (NULL);
+	}
 
 	dsk_set_geometry (cow, cow->blocks, 0, dsk->h, dsk->s);
 	dsk_set_visible_chs (cow, cow->c, cow->h, cow->s);

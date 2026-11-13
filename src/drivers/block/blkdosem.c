@@ -71,9 +71,7 @@ int dsk_dosemu_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 		return (1);
 	}
 
-	fflush (img->fp);
-
-	return (0);
+	return (fflush (img->fp) != 0);
 }
 
 static

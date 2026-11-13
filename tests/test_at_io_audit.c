@@ -285,11 +285,18 @@ void check_at_protocol (void)
 	pc->kbd.key_i = pc->kbd.key_j;
 	mem_set_uint8 (pc->prt, 0x64, 0x60);
 	mem_set_uint8 (pc->prt, 0x60, 5);
+	/* Reset while LED data, its acknowledgment and a scan byte are pending. */
+	mem_set_uint8 (pc->prt, 0x60, 0xed);
+	pc_kbd_set_keycode (&pc->kbd, 0x1e);
 	mem_set_uint8 (pc->prt, 0x60, 0xff);
 	keyboard_reply (pc, 0xfa);
 	keyboard_reply (pc, 0xaa);
 	mem_set_uint8 (pc->prt, 0x60, 0xfe);
 	keyboard_reply (pc, 0xaa);
+	keyboard_ticks (pc, 512);
+	check_value ("reset drains pending reply and scan byte", mem_get_uint8 (pc->prt, 0x64) & 1, 0);
+	pc_kbd_set_keycode (&pc->kbd, 0x20);
+	keyboard_reply (pc, 0x20);
 	mem_set_uint8 (pc->prt, 0x60, 0xed);
 	keyboard_reply (pc, 0xfa);
 	mem_set_uint8 (pc->prt, 0x60, 7);
@@ -1273,6 +1280,26 @@ void check_wd_media (void)
 	wd1003_clock (pc->wd1003, PCE_IBMPC_CLK2 / 100);
 	check_value ("reset cancels partial write", dsk_read_lba (disk, buf, 0, 1), 0);
 	check_value ("partial write did not reach media", buf[0] | (buf[1] << 8), 0);
+	/* A two-sector write starting at the last sector can commit only one. */
+	disk_t *tiny = dsk_ram_open (NULL, 2, 1, 1, 2, 0);
+	check_value ("two-sector test disk allocated", tiny != NULL, 1);
+	if (tiny != NULL) {
+		check_value ("attach two-sector test disk", wd1003_set_disk (pc->wd1003, 1, tiny), 0);
+		wd_task (pc, 1, 0, 0, 1, 2, 0x91);
+		wd_task (pc, 1, 0, 0, 2, 2, 0x30);
+		check_value ("last sector accepts first payload", mem_get_uint8 (pc->prt, 0x1f7), 0x58);
+		for (i = 0; i < 256; i++) mem_set_uint16_le (pc->prt, 0x1f0, 0x5555);
+		wd1003_clock (pc->wd1003, PCE_IBMPC_CLK2 / 100);
+		check_value ("past-end write signals error without DRQ", mem_get_uint8 (pc->prt, 0x1f7), 0x51);
+		check_value ("past-end write reports ID not found", mem_get_uint8 (pc->prt, 0x1f1), 0x10);
+		check_value ("one sector remains unwritten", mem_get_uint8 (pc->prt, 0x1f2), 1);
+		check_value ("read both test sectors", dsk_read_lba (tiny, buf, 0, 2), 0);
+		bad = 0;
+		for (i = 0; i < sizeof buf; i++) bad += (buf[i] != (i < 512 ? 0 : 0x55));
+		check_value ("first sector intact and last sector committed", bad, 0);
+		wd1003_set_disk (pc->wd1003, 1, NULL);
+		dsk_del (tiny);
+	}
 	pc_del (pc);
 	dsk_del (second);
 }

@@ -10,7 +10,7 @@ rel := tests
 TEST_EMULATOR ?= src/arch/ibmpc/pce-ibmpc
 
 DIRS += $(rel)
-DIST += $(rel)/Makefile.inc $(rel)/test_ibmpc_memory.c $(rel)/test_ibmpc_exit.py $(rel)/test_at_kbd.c
+DIST += $(rel)/Makefile.inc $(rel)/test_ibmpc_memory.c $(rel)/test_ibmpc_exit.py $(rel)/test_ibmpc_startup.py $(rel)/asm/twdflush.asm $(rel)/test_at_kbd.c
 
 # -----------------------------------------------------------------------
 # The e8086 archive (all CPU object files linked into one archive).
@@ -356,6 +356,7 @@ EXIT_TEST_BIN ?= $(TEST_EMULATOR)
 .PHONY: check-exit
 check-exit: $(EXIT_TEST_BIN)
 	python3 tests/test_ibmpc_exit.py $(EXIT_TEST_BIN)
+	python3 tests/test_ibmpc_startup.py $(EXIT_TEST_BIN)
 
 tests/test_at_io_audit.o tests/test_at_io_audit_main.o tests/test_ibmpc_memory.o: src/devices/wd1003.h
 
@@ -684,3 +685,25 @@ check-upd9002-zex: tests/asm/zexrun.com src/arch/ibmpc/pceutils/pceexit.com $(TE
 
 CLN += tests/asm/zexrun.com
 DIST += tests/asm/zexrun.asm tests/run_upd9002_zex.py
+
+DIST += tests/test_cow_commit.c
+ifeq ($(PCE_HOST_WINDOWS),0)
+.PHONY: check-cow-commit
+check-unit: check-cow-commit
+check-cow-commit: tests/test_cow_commit
+	$(QR)d=$$(mktemp -d) || exit 1; trap 'rm -rf "$$d"' EXIT; ./tests/test_cow_commit "$$d/base" "$$d/cow"
+tests/test_cow_commit: tests/test_cow_commit.c $(DRV_BLK_OBJ) $(DRV_PRI_OBJ) $(DRV_PSI_OBJ) src/lib/sysdep.o
+	$(QR)$(CC) $(CFLAGS_DEFAULT) $(LDFLAGS_DEFAULT) -o $@ $^
+CLN += tests/test_cow_commit
+endif
+
+DIST += tests/test_sparse_metadata.c
+ifeq ($(PCE_HOST_WINDOWS),0)
+.PHONY: check-sparse-metadata
+check-unit: check-sparse-metadata
+check-sparse-metadata: tests/test_sparse_metadata
+	$(QR)d=$$(mktemp -d) || exit 1; trap 'rm -rf "$$d"' EXIT; ./tests/test_sparse_metadata "$$d/pbi" "$$d/qed"
+tests/test_sparse_metadata: tests/test_sparse_metadata.c $(DRV_BLK_OBJ) $(DRV_PRI_OBJ) $(DRV_PSI_OBJ) src/lib/sysdep.o
+	$(QR)$(CC) $(CFLAGS_DEFAULT) $(LDFLAGS_DEFAULT) -o $@ $^
+CLN += tests/test_sparse_metadata
+endif

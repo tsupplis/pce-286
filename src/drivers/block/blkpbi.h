@@ -47,6 +47,7 @@ typedef struct {
 	unsigned char blbits;
 
 	char          header_modified;
+	char          metadata_error; /* Reopen before using uncertain cached mappings. */
 
 	uint64_t      image_size;
 	uint64_t      l1_table_offset;

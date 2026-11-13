@@ -12,6 +12,7 @@ typedef struct {
     unsigned long busy_start, busy_cycles;
 } pc_npx_t;
 struct ibmpc_t;
+int pc_npx_8087_cpu(const char *cpu);
 int pc_npx_config(ini_sct_t *cfg);
 void pc_npx_init(struct ibmpc_t *pc, unsigned model);
 void pc_npx_board_tick(struct ibmpc_t *pc);

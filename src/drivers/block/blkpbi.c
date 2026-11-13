@@ -52,7 +52,8 @@ int pbi_read_header (disk_pbi_t *pbi)
 static
 int pbi_write_header (disk_pbi_t *pbi)
 {
-	if (dsk_write (pbi->fp, pbi->header, 0, sizeof (pbi->header))) {
+	if (dsk_write (pbi->fp, pbi->header, 0, sizeof (pbi->header)) || fflush (pbi->fp)) {
+		pbi->metadata_error = 1;
 		return (1);
 	}
 
@@ -88,11 +89,10 @@ int pbi_read_l1 (disk_pbi_t *pbi)
 static
 int pbi_write_l1 (disk_pbi_t *pbi)
 {
-	if (dsk_write (pbi->fp, pbi->t1, pbi->l1_table_offset, pbi->l1_table_size)) {
+	if (dsk_write (pbi->fp, pbi->t1, pbi->l1_table_offset, pbi->l1_table_size) || fflush (pbi->fp)) {
+		pbi->metadata_error = 1;
 		return (1);
 	}
-
-	fflush (pbi->fp);
 
 	return (0);
 }
@@ -116,11 +116,10 @@ int pbi_read_l2 (disk_pbi_t *pbi, uint64_t ofs)
 static
 int pbi_write_l2 (disk_pbi_t *pbi)
 {
-	if (dsk_write (pbi->fp, pbi->t2, pbi->l2_table_offset, pbi->l2_table_size)) {
+	if (dsk_write (pbi->fp, pbi->t2, pbi->l2_table_offset, pbi->l2_table_size) || fflush (pbi->fp)) {
+		pbi->metadata_error = 1;
 		return (1);
 	}
-
-	fflush (pbi->fp);
 
 	return (0);
 }
@@ -323,6 +322,10 @@ int pbi_translate_write (disk_pbi_t *pbi, uint64_t *ofs)
 			return (1);
 		}
 
+		if (pbi_write_file_size (pbi, pbi->file_size + pbi->block_size)) {
+			return (1);
+		}
+
 		dsk_set_uint64_be (pbi->t2, 8 * l2idx, block_offset);
 
 		if (pbi_write_l2 (pbi)) {
@@ -331,9 +334,6 @@ int pbi_translate_write (disk_pbi_t *pbi, uint64_t *ofs)
 
 		*ofs = block_offset + block_index;
 
-		if (pbi_write_file_size (pbi, pbi->file_size + pbi->block_size)) {
-			return (1);
-		}
 
 		return (0);
 	}
@@ -359,6 +359,7 @@ int pbi_read (disk_t *dsk, void *buf, uint32_t i, uint32_t n)
 	}
 
 	pbi = dsk->ext;
+	if (pbi->metadata_error) return (1);
 
 	mask = (1UL << (pbi->blbits - 9)) - 1;
 
@@ -421,6 +422,7 @@ int pbi_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 	}
 
 	pbi = dsk->ext;
+	if (pbi->metadata_error) return (1);
 
 	mask = (1UL << (pbi->blbits - 9)) - 1;
 
@@ -454,7 +456,7 @@ int pbi_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 		}
 	}
 
-	return (0);
+	return (fflush (pbi->fp) != 0);
 }
 
 static
@@ -464,7 +466,7 @@ int pbi_commit (disk_pbi_t *pbi)
 	unsigned long blki, blkn, blkm;
 	uint64_t      ofs;
 
-	if (pbi->next == NULL) {
+	if (pbi->metadata_error || pbi->next == NULL) {
 		return (1);
 	}
 
@@ -566,7 +568,7 @@ int dsk_pbi_set_uniform (disk_pbi_t *pbi, uint64_t ofs, unsigned long val)
 	unsigned long l2idx;
 	uint64_t      l2val;
 
-	if (ofs & pbi->block_mask) {
+	if (pbi->metadata_error || (ofs & pbi->block_mask)) {
 		return (1);
 	}
 
@@ -779,6 +781,7 @@ disk_t *dsk_pbi_open_fp (FILE *fp, int ro)
 		return (NULL);
 	}
 
+	pbi->metadata_error = 0;
 	pbi->next = NULL;
 
 	pbi->t1 = NULL;

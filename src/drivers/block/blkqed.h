@@ -58,6 +58,7 @@ typedef struct {
 
 	unsigned char header[4096];
 	char          header_modified;
+	char          metadata_error; /* Reopen before using uncertain cached mappings. */
 
 	uint64_t      l2_table_offset;
 

@@ -295,7 +295,7 @@ int dsk_get_filesize (FILE *fp, uint64_t *cnt)
 
 int dsk_set_filesize (FILE *fp, uint64_t cnt)
 {
-	fflush (fp);
+	if (fflush (fp)) return (1);
 
 #ifdef HAVE_FTRUNCATE
 	if (ftruncate (fileno (fp), cnt) == 0) {

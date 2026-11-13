@@ -25,7 +25,11 @@
  */
 
 
+#include <errno.h>
 #include <stdio.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -175,25 +179,38 @@ int mc146818a_load (mc146818a_t *rtc)
 
 int mc146818a_save (mc146818a_t *rtc)
 {
-	int  r;
+	int r = 1;
+	unsigned i;
 	FILE *fp;
+	char *tmp;
 
-	if (rtc->fname == NULL) {
-		return (1);
+	if (rtc->fname == NULL) return (1);
+
+	/* Exclusive creation keeps concurrent saves from sharing a temporary file. */
+	tmp = malloc (strlen (rtc->fname) + sizeof (".tmp.999"));
+	if (tmp == NULL) return (1);
+
+	for (i = 0; i < 1000; i++) {
+		sprintf (tmp, "%s.tmp.%u", rtc->fname, i);
+		fp = fopen (tmp, "wbx");
+		if (fp == NULL) {
+			if (errno == EEXIST) continue;
+			break;
+		}
+
+		r = (fwrite (rtc->data, 1, 64, fp) != 64);
+		if (fclose (fp) != 0) r = 1;
+		if (r == 0) {
+#ifdef _WIN32
+			r = !MoveFileExA (tmp, rtc->fname, MOVEFILE_REPLACE_EXISTING);
+#else
+			r = (rename (tmp, rtc->fname) != 0);
+#endif
+		}
+		if (r) remove (tmp);
+		break;
 	}
-
-	if ((fp = fopen (rtc->fname, "wb")) == NULL) {
-		return (1);
-	}
-
-	r = 0;
-
-	if (fwrite (rtc->data, 1, 64, fp) != 64) {
-		r = 1;
-	}
-
-	fclose (fp);
-
+	free (tmp);
 	return (r);
 }
 

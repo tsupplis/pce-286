@@ -2,7 +2,7 @@
 
 | Machine | CPU | Configuration | Error signal |
 |---|---|---|---|
-| PC/XT (5150, 5160) | 8088 or 8086 | `npx { model = "8087" }` | NMI, enabled by port A0h bit 7 |
+| PC/XT (5150, 5160) | 8088, 8086, V20 or V30 | `npx { model = "8087" }` | NMI, enabled by port A0h bit 7 |
 | AT (5170) | 80286 | `npx { model = "80287" }` | IRQ13 |
 
 Omit `npx` to disable the coprocessor (default). No guest driver required. On an AT with saved CMOS, update the equipment setting when adding the 80287.

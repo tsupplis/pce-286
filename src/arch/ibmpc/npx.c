@@ -6,6 +6,12 @@
 #include <lib/log.h>
 #include <string.h>
 
+int pc_npx_8087_cpu(const char *cpu)
+{
+    return !strcmp(cpu, "8088") || !strcmp(cpu, "8086") ||
+        !strcmp(cpu, "v20") || !strcmp(cpu, "v30");
+}
+
 /* Validate before constructing devices: no half-created machine on error. */
 int pc_npx_config(ini_sct_t *cfg)
 {
@@ -15,7 +21,7 @@ int pc_npx_config(ini_sct_t *cfg)
     ini_get_string(ini_next_sct(cfg, NULL, "cpu"), "model", &cpu, "8088");
     ini_get_string(ini_next_sct(cfg, NULL, "system"), "model", &system, "5150");
     if (!strcmp(n, "8087") && (!strcmp(system,"5150") || !strcmp(system,"5160")) &&
-        (!strcmp(cpu,"8088") || !strcmp(cpu,"8086"))) return 1;
+        pc_npx_8087_cpu(cpu)) return 1;
     if (!strcmp(n,"80287") && !strcmp(system,"5170") && !strcmp(cpu,"80286")) return 2;
     pce_log(MSG_ERR,"*** incompatible NPX configuration: system=%s cpu=%s npx=%s\n",system,cpu,n);
     return -1;
@@ -243,7 +249,7 @@ void pc_npx_init(ibmpc_t *pc,unsigned model)
     else pce_log(MSG_INF,"NPX:      timing=%u (partial execution timing, CPU clock 1:1)\n",(unsigned)pc->npx.timing);
     if (model==1) {
         pc->ppi_port_a[0] |= 2;
-        pc->ppi_port_c[0] |= 2;
+        if (pc->model & PCE_IBMPC_5160) pc->ppi_port_c[0] |= 2;
     }
     pce_log(MSG_INF,"NPX:      model=%s (experimental functional emulation)\n",model==1 ? "8087" : "80287");
 }

@@ -35,7 +35,9 @@ static void code(ibmpc_t *pc,const unsigned char *bytes,unsigned size)
     for(unsigned i=0;i<size;i++) mem_set_uint8(pc->mem,0x100+i,bytes[i]);
     c->state=0; c->prefix=0; c->msw=0;
     e86_set_cs(c,0); e86_set_ds(c,0); e86_set_ss(c,0);
-    e86_set_sp(c,0x8000); e86_set_ip(c,0x100); e86_set_flags(c,2);
+    e86_set_sp(c,0x8000); e86_set_ip(c,0x100);
+    /* NEC mode flag selects native x86 execution. */
+    e86_set_flags(c,2 | ((c->cpu & E86_CPU_NEC) ? 0x8000 : 0));
     c->pq_cnt=0;
 }
 static void steps(ibmpc_t *pc,unsigned n) {while(n--) e86_execute(pc->cpu);}
@@ -48,7 +50,8 @@ static void test(const char *sys,const char *cpu,const char *npx)
     const unsigned char divide[]={0xdb,0xe3,0xd9,0x2e,2,3,0xd9,0xe8,0xd9,0xee,0xde,0xf9,0x9b,0x90};
     CHECK(pc!=NULL); if(!pc) return;
     CHECK(pc->npx.enabled);
-    CHECK(pc_set_cpu_model(pc,"v20")!=0);
+    CHECK((pc_set_cpu_model(pc,"v20")==0)==!at);
+    CHECK(pc_set_cpu_model(pc,"80186")!=0);
     CHECK(pc_set_cpu_model(pc,cpu)==0);
     if(at) CHECK(pc->at_rtc->data[0x14]&2);
     else {
@@ -286,7 +289,7 @@ int main(void)
         if(i==2) CHECK(!(pc->at_rtc->data[0x14]&2));
         destroy(pc);
     }
-    CHECK(machine("5160","v20","8087")==NULL);
+    test("5160","v20","8087");test("5160","v30","8087");
     CHECK(machine("5160","80186","8087")==NULL);
     CHECK(machine("5170","80286","8087")==NULL);
     CHECK(machine("5160","8088","80287")==NULL);

@@ -55,9 +55,7 @@ int cow_write_bitmap (disk_cow_t *cow)
 		return (1);
 	}
 
-	fflush (cow->fp);
-
-	return (0);
+	return (fflush (cow->fp) != 0);
 }
 
 /*
@@ -122,53 +120,23 @@ int cow_get_block (disk_cow_t *cow, uint32_t blk, uint32_t *cnt)
 }
 
 static
-int cow_set_block (disk_cow_t *cow, uint32_t blk, uint32_t cnt, int val)
+int cow_mark_copied (disk_cow_t *cow, uint32_t blk, uint32_t cnt)
 {
-	uint32_t      i, i0, i1;
-	unsigned char m0, m1;
+	uint32_t first = blk / 8;
+	uint32_t last = (blk + cnt - 1) / 8;
+	uint32_t i;
 
-	cnt = (blk + cnt - 1);
-
-	i0 = blk / 8;
-	i1 = cnt / 8;
-
-	m0 = 0x80 >> (blk & 7);
-	m1 = 0x80 >> (cnt & 7);
-
-	m0 |= (m0 - 1);
-	m1 |= (m1 - 1) ^ 0xff;
-
-	if (val) {
-		if (i0 == i1) {
-			cow->bitmap[i0] |= (m0 & m1);
-		}
-		else {
-			cow->bitmap[i0] |= m0;
-			cow->bitmap[i1] |= m1;
-			for (i = i0 + 1; i < i1; i++) {
-				cow->bitmap[i] = 0xff;
-			}
-		}
+	/* This run was entirely unmapped. Leave it retryable on error. */
+	for (i = 0; i < cnt; i++) {
+		cow->bitmap[(blk + i) / 8] |= 0x80 >> ((blk + i) & 7);
 	}
-	else {
-		if (i0 == i1) {
-			cow->bitmap[i0] &= ~(m0 & m1);
+	if (dsk_write (cow->fp, cow->bitmap + first, cow->bitmap_offset + first,
+		last - first + 1) || fflush (cow->fp)) {
+		for (i = 0; i < cnt; i++) {
+			cow->bitmap[(blk + i) / 8] &= ~(0x80 >> ((blk + i) & 7));
 		}
-		else {
-			cow->bitmap[i0] &= ~m0;
-			cow->bitmap[i1] &= ~m1;
-			for (i = i0 + 1; i < i1; i++) {
-				cow->bitmap[i] = 0x00;
-			}
-		}
-	}
-
-	i1 = i1 - i0 + 1;
-
-	if (dsk_write (cow->fp, cow->bitmap + i0, cow->bitmap_offset + i0, i1)) {
 		return (1);
 	}
-
 	return (0);
 }
 
@@ -214,6 +182,7 @@ static
 int dsk_cow_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 {
 	const unsigned char *tmp;
+	int           copied;
 	uint32_t            cnt;
 	uint64_t            ofs;
 	disk_cow_t          *cow;
@@ -233,11 +202,12 @@ int dsk_cow_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 		}
 
 		cnt = n;
-		if (cow_get_block (cow, i, &cnt) == 0) {
-			cow_set_block (cow, i, cnt, 1);
+		copied = cow_get_block (cow, i, &cnt);
+		if (dsk_write (cow->fp, tmp, ofs, 512 * cnt)) {
+			return (1);
 		}
 
-		if (dsk_write (cow->fp, tmp, ofs, 512 * cnt)) {
+		if (!copied && (fflush (cow->fp) || cow_mark_copied (cow, i, cnt))) {
 			return (1);
 		}
 
@@ -247,9 +217,7 @@ int dsk_cow_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 		ofs += 512 * cnt;
 	}
 
-	fflush (cow->fp);
-
-	return (0);
+	return (fflush (cow->fp) != 0);
 }
 
 static
@@ -272,12 +240,8 @@ int cow_commit_block (disk_cow_t *cow, uint32_t blk, unsigned cnt)
 			return (1);
 		}
 
-		memset (buf, 0, 512 * n);
-
-		if (dsk_write (cow->fp, buf, ofs, 512 * n)) {
-			return (1);
-		}
-
+		/* Readers using the old on-disk bitmap still need this payload
+		 * if commit is interrupted before the new bitmap is published. */
 		for (i = 0; i < n; i++) {
 			cow->bitmap[(blk + i) >> 3] &= ~(0x80 >> ((blk + i) & 7));
 		}
@@ -295,7 +259,7 @@ int dsk_cow_commit (disk_t *dsk)
 {
 	int           r;
 	unsigned      k;
-	uint32_t      i, n;
+	uint32_t      i;
 	uint32_t      blk;
 	unsigned char msk;
 	disk_cow_t    *cow;
@@ -303,7 +267,6 @@ int dsk_cow_commit (disk_t *dsk)
 	cow = dsk->ext;
 
 	r = 0;
-	n = 0;
 
 	for (i = 0; i < cow->bitmap_size; i++) {
 		msk = cow->bitmap[i];
@@ -321,10 +284,7 @@ int dsk_cow_commit (disk_t *dsk)
 				msk = (msk << 1) & 0xff;
 			}
 
-			if (cow_commit_block (cow, blk, k) == 0) {
-				n += k;
-			}
-			else {
+			if (cow_commit_block (cow, blk, k)) {
 				r = 1;
 			}
 
@@ -332,13 +292,8 @@ int dsk_cow_commit (disk_t *dsk)
 		}
 	}
 
-	if (n > 0) {
-		if (cow_write_bitmap (cow)) {
-			return (1);
-		}
-	}
-
-	fflush (cow->fp);
+	/* Also retry publication after a previous bitmap flush failed. */
+	if (cow_write_bitmap (cow)) return (1);
 
 	return (r);
 }

@@ -153,7 +153,7 @@ int dsk_part_write (disk_t *dsk, const void *buf, uint32_t i, uint32_t n)
 				return (1);
 			}
 
-			fflush (p->part[pi].fp);
+			if (fflush (p->part[pi].fp)) return (1);
 		}
 		else {
 			m = p->part[pi].block_i - i;
@@ -194,6 +194,8 @@ int dsk_part_add_partition_fp (disk_t *dsk, FILE *fp, int close,
 	disk_part_t *p;
 
 	p = dsk->ext;
+
+	if (p->part_cnt >= DSK_PART_MAX) return (1);
 
 	p->part[p->part_cnt].block_i = blk_i;
 	p->part[p->part_cnt].block_n = blk_n;
